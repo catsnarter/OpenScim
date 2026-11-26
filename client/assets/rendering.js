@@ -43782,7 +43782,9 @@ var UIOverlayRenderer = class e {
         Number(e.placement.abovePrayerIcon) -
         Number(a.placement.abovePrayerIcon),
     );
-    let f = Number.POSITIVE_INFINITY;
+    // Above Attack Timer Metronome's number (LL, drawn first) where the two would meet.
+    const metronomeNumber = a.tickCounters.find((counter) => counter.key === "player-attack-timer-number");
+    let f = metronomeNumber ? metronomeNumber.screenY - metronomeNumber.fontSize / 2 : Number.POSITIVE_INFINITY;
     for (const { placement: placement, ...t } of l) {
       const {
         fontSize: fontSize,
