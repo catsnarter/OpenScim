@@ -4,6 +4,7 @@
 // eats at, and the rubble on its way (`incoming`: tiles and the tick it lands).
 // Each script decides from it and the tick alone.
 import { attack, protect, rangedGear, meleeGear, setBossHp } from "./common.mjs";
+import { scurriusLoadouts } from "../../../client/encounters/scurrius/loadouts.js";
 
 const KIND = "scurrius";
 const BOSS = "scurrius";
@@ -79,6 +80,41 @@ export const scenarios = [
     ticks: 120,
     mechanics: { infiniteHealth: true, infinitePrayer: true },
     ...meleeGear,
+    script(tick, api) {
+      if (tick === 1) setBossHp(api, 145);
+      pray(api);
+      if (dodge(api)) return;
+      if (state(api).phase !== "enraged") return;
+      const target = rats(api)[0]?.id ?? BOSS;
+      if (api.player().attackTarget !== target) attack(api, target);
+    },
+  },
+  {
+    // His own loadout with the rat bone shortbow: +10 to the max hit against
+    // him and his rats, and no attack cooldown on the rats, so a wave goes down
+    // a rat a tick. Rats first, praying and dodging as above.
+    name: "scurrius/bone-shortbow-kill",
+    kind: KIND,
+    seed: 4,
+    ticks: 500,
+    mechanics: { infiniteHealth: true, infinitePrayer: true },
+    equipment: scurriusLoadouts.bone_shortbow.equipment,
+    supplies: scurriusLoadouts.bone_shortbow.supplies,
+    script(tick, api) {
+      pray(api);
+      if (dodge(api)) return;
+      const target = rats(api)[0]?.id ?? BOSS;
+      if (api.player().attackTarget !== target) attack(api, target);
+    },
+  },
+  {
+    // The rat bone mace in the middle at 29%: his rats, then him, from beside his body.
+    name: "scurrius/bone-mace-middle",
+    kind: KIND,
+    seed: 15,
+    ticks: 160,
+    mechanics: { infiniteHealth: true, infinitePrayer: true },
+    equipment: scurriusLoadouts.bone_mace.equipment,
     script(tick, api) {
       if (tick === 1) setBossHp(api, 145);
       pray(api);

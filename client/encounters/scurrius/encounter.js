@@ -29,11 +29,11 @@
 // Not yet: the public lair (7221, 1,500 hitpoints and higher max hits) as a
 // variant; his eating idle as his stand at a pile (a base animation the
 // default scene has no way to change); the projectiles leaving from a back
-// corner of his body (tsps); the rat bone weapons (+10 against rats, and no
-// attack delay on his rats: WIKI); of his sounds that are in no animation
+// corner of his body (tsps); of his sounds that are in no animation
 // (audio.js), all but the bricks and the bolts and fur balls landing.
 import { getMonsterFormulaStats, getMonsterHitpoints } from "../../engine/monsterStats.js";
 import { createSeededRandom } from "../../engine/random.js";
+import { isRatBoneWeapon } from "../../engine/playerAttack/profiles.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
 import { rollNpcAttack, isNpcInAttackRange } from "../shared/npcAttack.js";
 import { buildActorVisualTarget, getProjectileSourcePosition, faceActorToward, healNpc } from "../shared/npcHelpers.js";
@@ -95,6 +95,9 @@ const onActor = (spotAnimId, actor) => ({ spotAnimId, target: buildActorVisualTa
 
 class ScurriusEncounter {
   kind = scurriusKind;
+  // The fight's world, for the engine rules (getEngineRules), which are asked of a target alone. Private, so the
+  // encounter's state (snapshots, digests) leaves it out.
+  #world = null;
   constructor() {
     this.rats = new Rats(this);
     this.definitions = new NpcDefinitionRegistry([bossDefinition, ratDefinition].map((definition) => definition.register(this)));
@@ -198,6 +201,7 @@ class ScurriusEncounter {
   // Before the NPCs: what is due (rubble, rats), and the phase his hitpoints call for.
   resolveHazards(context) {
     this.now = context.tick;
+    this.#world = context.world;
     for (let due = this.takeDueTask(); due; due = this.takeDueTask()) due.task(context);
     this.incoming = this.incoming.filter((entry) => entry.landsAt > this.now);
     const boss = this.boss(context.world);
@@ -488,7 +492,14 @@ class ScurriusEncounter {
     return {
       playerDamageOnNpc: (damage, { target }) => (this.rats.isRat(target) ? target.vitals.hp : damage),
       playerAlwaysAccurate: (context, attack) => this.rats.isRat(attack.target),
+      // WIKI (Bone mace, Bone shortbow, Bone staff): "no attack cooldown when attacking the giant rats that Scurrius
+      // summons": a rat is attacked whatever the timer, and the timer stays as it was.
+      playerAttackOnCooldown: (target) => (this.ratBoneOnRat(target) ? { keepCooldown: true } : undefined),
+      playerAttackKeepsReady: (target) => this.ratBoneOnRat(target),
     };
+  }
+  ratBoneOnRat(target) {
+    return this.rats.isRat(target) && isRatBoneWeapon(this.#world?.getPlayer()?.equipment?.weapon);
   }
 
   onNpcDefeated(defeat, context, completionOwnership) {
