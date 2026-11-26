@@ -40,6 +40,32 @@ var NO_FORMULA_STAGES = {
   attackRollStages: [],
   maxHitStages: [],
 };
+// Dragon hunter weapons against a dragon (the monster table's attribute
+// "dragon"): [accuracy, damage] percent added. WIKI (Dragon hunter crossbow):
+// +30% accuracy and +25% damage, its ornament kits' alike; (Dragon hunter
+// lance): +20% and +20%. The dragon hunter wand is not here: profiles.js
+// still refuses it against a dragon until its numbers are checked.
+var dragonHunterPercentsByWeaponId = new Map([
+  [21012, [30, 25]], // Dragon hunter crossbow
+  [25916, [30, 25]], // Dragon hunter crossbow (t)
+  [25918, [30, 25]], // Dragon hunter crossbow (b)
+  [22978, [20, 20]], // Dragon hunter lance
+]);
+var DRAGON_ATTRIBUTE = "dragon";
+function getDragonHunterStages(formulaStageInput) {
+  const weaponId = formulaStageInput.weaponId;
+  if (weaponId === undefined || !formulaStageInput.targetAttributes.includes(DRAGON_ATTRIBUTE)) {
+    return null;
+  }
+  const percents = dragonHunterPercentsByWeaponId.get(weaponId) ?? dragonHunterPercentsByWeaponId.get(getBaseItemId(weaponId));
+  if (undefined === percents) {
+    return null;
+  }
+  return {
+    attackRollStages: [percentToRatio(100 + percents[0])],
+    maxHitStages: [percentToRatio(100 + percents[1])],
+  };
+}
 var twistedBowIdSet = new Set([20997, 28540]);
 var crystalBowIdSet = new Set([23983, 24123, 25865, 25867, 27187]);
 var CRYSTAL_HELM_ID = 23971;
@@ -173,6 +199,10 @@ function computeFormulaStages(formulaStageInput) {
   const crystalBowStages = getCrystalBowStages(formulaStageInput);
   if (crystalBowStages !== null) {
     return crystalBowStages;
+  }
+  const dragonHunterStages = getDragonHunterStages(formulaStageInput);
+  if (dragonHunterStages !== null) {
+    return dragonHunterStages;
   } else if (formulaStageInput.targetAttributes.includes(DEMON_ATTRIBUTE)) {
     return getDemonbaneWeaponStages(formulaStageInput);
   } else {
