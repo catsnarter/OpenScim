@@ -43726,25 +43726,36 @@ var UIOverlayRenderer = class e {
   static AL(a, t) {
     return a + e.OSRS_HEALTHBAR_HEIGHT + (e.OSRS_HEALTHBAR_HEIGHT + 2) * t;
   }
-  LL(a, t, n, s, r, posedModelHeight) {
-    const i = e.wL(n.playerNextAttackTick, n.playerAttackSpeed, n.currentTick);
-    if (i === null) {
-      return;
-    }
-    const o = this.playerOverheadBase(t, s, posedModelHeight);
+  // The plugin Attack Timer Metronome (client/plugins/attackTimerMetronome.js),
+  // where RuneLite's draws them: the bar's top 7 px under the point at the
+  // player's logical height, its offset and 5 more, centred on it; the number
+  // at the height of its position and offset.
+  LL(a, t, n, s) {
+    const state = { currentTick: n.currentTick, nextAttackTick: n.playerNextAttackTick, attackSpeed: n.playerAttackSpeed };
+    const at = (height) => t.tileToScreen({ x: s[0] + 0.5, y: s[1] + 0.5, level: -Nb(this.terrainHeights, s[0], s[1]) / 128 + height / 128 });
+    const bar = getAttackTimerBar(state);
+    const o = bar && at(playerLogicalHeight + bar.heightOffset + 5);
     if (o) {
       a.timerBars ||= [];
       a.timerBars.push({
         screenX: o.x,
-        screenY: e.AL(o.y, 1),
-        ratio: i,
-        width: e.OSRS_HEALTHBAR_WIDTH,
-        height: e.OSRS_HEALTHBAR_HEIGHT,
+        screenY: o.y + 7 + bar.height / 2,
+        ratio: bar.ratio,
+        width: bar.width,
+        height: bar.height,
+        ...(bar.frontImage ? { frontImage: bar.frontImage, backImage: bar.backImage } : {}),
         key: "player-attack-timer-metronome",
       });
     }
+    const number = getAttackTimerNumber(state);
+    const p = number && at((tickHeights[number.position] ?? tickHeights.DEFAULT)(playerLogicalHeight) + number.heightOffset);
+    if (p) {
+      a.tickCounters ||= [];
+      // RuneLite writes from its point up, the point on the text's baseline.
+      a.tickCounters.push({ screenX: p.x, screenY: p.y - number.fontSize / 2, text: number.text, textColor: number.textColor, fontSize: number.fontSize, fontFamily: number.fontFamily, key: "player-attack-timer-number" });
+    }
   }
-  DL(a, t, n, s, { tickCounter: tickCounter, attackCooldown: attackCooldown }, posedModelHeight) {
+  DL(a, t, n, s, { tickCounter: tickCounter }, posedModelHeight) {
     const l = [];
     if (tickCounter && tickCounter.max > 0) {
       const e = ((n.currentTick - 1) % tickCounter.max) + 1;
@@ -43753,15 +43764,6 @@ var UIOverlayRenderer = class e {
         text: e.toString(),
         textColor: E_(e, tickCounter.max, tickCounter.colors),
         key: "player-tick-counter",
-      });
-    }
-    const o = n.playerNextAttackTick - n.currentTick;
-    if (attackCooldown && o > 0) {
-      l.push({
-        placement: attackCooldown,
-        text: o.toString(),
-        textColor: e.ATTACK_COOLDOWN_TICKS_COLOR,
-        key: "player-attack-cooldown-ticks",
       });
     }
     if (l.length === 0) {
@@ -44253,7 +44255,6 @@ ce(UIOverlayRenderer, "OSRS_OVERHEAD_TEXT_COLOR", "#ffff00");
 ce(UIOverlayRenderer, "OSRS_OVERHEAD_TEXT_FONT_SIZE", 16);
 ce(UIOverlayRenderer, "OVERHEAD_NUMBER_GAP", 2);
 ce(UIOverlayRenderer, "HP_TEXT_ABOVE_BAR_HEIGHT", 25 / 128);
-ce(UIOverlayRenderer, "ATTACK_COOLDOWN_TICKS_COLOR", "#00ffff");
 ce(UIOverlayRenderer, "PLAYER_HEAD_WORLD_HEIGHT", 2.2);
 ce(UIOverlayRenderer, "PLAYER_MODEL_CENTER_HEIGHT", __.PLAYER_HEAD_WORLD_HEIGHT * (100 / 215));
 ce(UIOverlayRenderer, "HITSPLAT_OFFSETS", [
@@ -47781,16 +47782,8 @@ var SceneCompositor = class e {
         this.playerAnimController?.posedModelHeight,
       );
     }
-    if (options.showAttackTimerMetronome) {
-      this.uiOverlayRenderer.LL(
-        n,
-        uiCamera,
-        simulationState,
-        N,
-        interpolatedTick ?? currentTick,
-        this.playerAnimController?.posedModelHeight,
-      );
-    }
+    // Attack Timer Metronome: what it draws, if anything, its store says (client/plugins/attackTimerMetronome.js).
+    this.uiOverlayRenderer.LL(n, uiCamera, simulationState, N);
     if (options.playerOverheadNumbers) {
       this.uiOverlayRenderer.DL(
         n,
@@ -57806,6 +57799,8 @@ import {overrideProjectile} from "/plugins/projectileOverride.js";
 import {getBlindfold} from "/plugins/blindfold.js";
 import {getSkyboxColor} from "/plugins/skybox.js";
 import {getDefenceOverhead} from "/plugins/defenceTracker.js";
+// The plugin Attack Timer Metronome (client/plugins/attackTimerMetronome.js): its number over the player and its bar.
+import {getAttackTimerNumber, getAttackTimerBar, tickHeights} from "/plugins/attackTimerMetronome.js";
 import {dt2FragmentShader} from "/dt2/shader.js";
 import {lobbyFragmentShader} from "/lobby/shader.js";
 import { LobbyEncounter } from "../encounters/lobby/LobbyEncounter.js";
@@ -60216,7 +60211,6 @@ var dZ = ({
   onCameraChange: onCameraChange,
   speedMultiplier: T = 1,
   playerOverheadNumbers: playerOverheadNumbers,
-  showAttackTimerMetronome: C = false,
   showNpcAttackTimerMetronome: x = false,
   hdHealthBars: hdHealthBars,
   entityHider: B = null,
@@ -60448,6 +60442,7 @@ var dZ = ({
         s.style.top = `${n.screenY}px`;
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
+        s.style.fontFamily = n.fontFamily ?? "'RuneScape Small', monospace"; // Attack Timer Metronome's Font Type
       }
     } else if (t) {
       t.remove();
@@ -60834,8 +60829,6 @@ var dZ = ({
   ha.current = T;
   const fa = (0, pn.useRef)(playerOverheadNumbers);
   fa.current = playerOverheadNumbers;
-  const ua = (0, pn.useRef)(C);
-  ua.current = C;
   const va = (0, pn.useRef)(x);
   va.current = x;
   const hdHealthBarsRef = (0, pn.useRef)(hdHealthBars);
@@ -60978,7 +60971,6 @@ var dZ = ({
           lineMarkerWidth: Ve.current,
           smoothTerrain: false,
           playerOverheadNumbers: fa.current,
-          showAttackTimerMetronome: ua.current,
           showNpcAttackTimerMetronome: va.current,
           entityHider: pa.current,
           tzhaarHpTracker: ka.current,
@@ -61420,7 +61412,6 @@ var bZ = ({
   fpsCap: q = 0,
   speedMultiplier: Z = 1,
   playerOverheadNumbers: playerOverheadNumbers,
-  showAttackTimerMetronome: X = false,
   showNpcAttackTimerMetronome: J = false,
   hdHealthBars: hdHealthBars,
   overlayGameScale: overlayGameScale = 1,
@@ -61587,7 +61578,6 @@ var bZ = ({
   const Ya = (0, pn.useRef)(y);
   const Xa = (0, pn.useRef)(Z);
   const Ja = (0, pn.useRef)(playerOverheadNumbers);
-  const Qa = (0, pn.useRef)(X);
   const et = (0, pn.useRef)(J);
   const hdHealthBarsRef = (0, pn.useRef)(hdHealthBars);
   const overlayGameScaleRef = (0, pn.useRef)(overlayGameScale);
@@ -61727,9 +61717,6 @@ var bZ = ({
   (0, pn.useEffect)(() => {
     Ja.current = playerOverheadNumbers;
   }, [playerOverheadNumbers]);
-  (0, pn.useEffect)(() => {
-    Qa.current = X;
-  }, [X]);
   (0, pn.useEffect)(() => {
     et.current = J;
   }, [J]);
@@ -62352,6 +62339,7 @@ var bZ = ({
         s.style.top = `${n.screenY}px`;
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
+        s.style.fontFamily = n.fontFamily ?? "'RuneScape Small', monospace"; // Attack Timer Metronome's Font Type
       }
     } else if (t) {
       t.remove();
@@ -63115,7 +63103,6 @@ var bZ = ({
           lineMarkerWidth: Va.current,
           smoothTerrain: Ka.current,
           playerOverheadNumbers: Ja.current,
-          showAttackTimerMetronome: Qa.current,
           showNpcAttackTimerMetronome: et.current,
           entityHider: at.current,
           tzhaarHpTracker: tt.current,

@@ -12,6 +12,7 @@ import { skyboxStore } from "/plugins/skybox.js";
 import { defenceTrackerStore, setDefenceTrackerEngine } from "/plugins/defenceTracker.js";
 // The replay's undo and markers: their options (Settings, Simulation) and keys.
 import { replayMarkerStore, listenForReplayKeys } from "/replay/markers.js";
+import { attackTimerMetronomeStore, setAttackTimerHdHealthBars } from "/plugins/attackTimerMetronome.js";
 if (typeof window !== "undefined") listenForBlindfold(window);
 import { showPluginsPausedHint } from "/plugins/pluginsPausedHint.js";
 import { thrallSpells, THRALL_END_SOUND_ID } from "/engine/thralls.js";
@@ -8796,7 +8797,7 @@ var STEPS = [
   },
   qde(
     "Attack Timer Metronome",
-    "A bar below your health bar that counts down the ticks until your next attack. <b>Show Attack Cooldown Ticks</b> adds the count as a number above your head, placed like the Tick Counter number and stacked with it when both are shown.",
+    "RuneLite's Attack Timer Metronome: the ticks until your next attack as a number above your head, <b>-1</b>, <b>-2</b> when an attack is late, and optionally a bar.",
     "attackTimerMetronome",
   ),
   {
@@ -21718,7 +21719,7 @@ var Yme = [
     }),
     plugin("attackTimerMetronome", "Attack Timer Metronome", {
       description:
-        "Counts down the ticks until your next attack, as a bar and optionally a number above your head.",
+        "Counts down the ticks until your next attack as a number above your head, shows late attacks as -1, -2, and optionally as a bar.",
       keywords: [
         "attack timer",
         "attack cycle",
@@ -21729,30 +21730,12 @@ var Yme = [
         "attack bar",
         "tick timer",
         "attack counter",
+        "lost ticks",
         "font size",
-        "offset",
       ],
     }),
-    _me("attackTimerMetronome", "Attack Timer Metronome", "Show Attack Bar", {
-      description: "The countdown bar below your health bar.",
-      keywords: ["cooldown bar", "attack timer bar"],
-    }),
-    _me(
-      "attackTimerMetronome",
-      "Attack Timer Metronome",
-      "Show Attack Cooldown Ticks",
-      {
-        description:
-          "The ticks left as a number above your head, with its own position and font size.",
-        keywords: [
-          "overhead timer",
-          "overhead number",
-          "attack cycle",
-          "font size",
-          "offset",
-          "above head",
-        ],
-      },
+    ...attackTimerMetronomeStore.options.map((option) =>
+      _me("attackTimerMetronome", "Attack Timer Metronome", option.label, { description: option.info, keywords: [] }),
     ),
     plugin("bossHealthBar", "Boss Health Bar", {
       description: "A movable OSRS-style boss health bar.",
@@ -24941,21 +24924,6 @@ var PluginsPanelContent = (0, React.memo)(
     onCameraRightClickMovesCameraToggle: onCameraRightClickMovesCameraToggle,
     cameraZoomIncrement: cameraZoomIncrement,
     onCameraZoomIncrementChange: onCameraZoomIncrementChange,
-    attackTimerMetronomeEnabled: attackTimerMetronomeEnabled,
-    onAttackTimerMetronomeToggle: onAttackTimerMetronomeToggle,
-    attackTimerMetronomeShowBar: attackTimerMetronomeShowBar,
-    onAttackTimerMetronomeShowBarToggle: onAttackTimerMetronomeShowBarToggle,
-    attackTimerMetronomeShowTicks: attackTimerMetronomeShowTicks,
-    onAttackTimerMetronomeShowTicksToggle:
-      onAttackTimerMetronomeShowTicksToggle,
-    attackTimerMetronomeFontSize: attackTimerMetronomeFontSize,
-    onAttackTimerMetronomeFontSizeChange: onAttackTimerMetronomeFontSizeChange,
-    attackTimerMetronomeAbovePrayerIcon: attackTimerMetronomeAbovePrayerIcon,
-    onAttackTimerMetronomeAbovePrayerIconToggle:
-      onAttackTimerMetronomeAbovePrayerIconToggle,
-    attackTimerMetronomeOffsetX: attackTimerMetronomeOffsetX,
-    attackTimerMetronomeOffsetY: attackTimerMetronomeOffsetY,
-    onAttackTimerMetronomeOffsetChange: onAttackTimerMetronomeOffsetChange,
     customMenuSwapsEnabled: customMenuSwapsEnabled,
     onCustomMenuSwapsToggle: onCustomMenuSwapsToggle,
     customMenuSwaps: customMenuSwaps,
@@ -25925,85 +25893,12 @@ var PluginsPanelContent = (0, React.memo)(
                         }),
                       ],
                     }),
-                    (0, jsxRuntime.jsxs)(PluginRow, {
+                    // Attack Timer Metronome keeps its own settings (client/plugins/attackTimerMetronome.js).
+                    (0, jsxRuntime.jsx)(PluginStoreEntry, {
                       label: "Attack Timer Metronome",
-                      pluginKey: "attackTimerMetronome",
-                      isOn: attackTimerMetronomeEnabled,
-                      onToggle: onAttackTimerMetronomeToggle,
-                      hasSettings: true,
+                      store: attackTimerMetronomeStore,
                       expanded: l6.attackTimerMetronome,
                       onToggleExpand: () => lx("attackTimerMetronome"),
-                      children: [
-                        (0, jsxRuntime.jsx)(SettingRow, {
-                          isModified:
-                            attackTimerMetronomeShowBar !==
-                            rfe.attackTimerMetronomeShowBar,
-                          onReset: () => {
-                            if (
-                              attackTimerMetronomeShowBar !==
-                              rfe.attackTimerMetronomeShowBar
-                            ) {
-                              onAttackTimerMetronomeShowBarToggle();
-                            }
-                          },
-                          searchId: gs(
-                            "attackTimerMetronome",
-                            "Show Attack Bar",
-                          ),
-                          children: (0, jsxRuntime.jsx)(OsrsCheckbox, {
-                            label: "Show Attack Bar",
-                            checked: attackTimerMetronomeShowBar,
-                            onChange: () =>
-                              onAttackTimerMetronomeShowBarToggle(),
-                          }),
-                        }),
-                        (0, jsxRuntime.jsx)(SettingRow, {
-                          isModified:
-                            attackTimerMetronomeShowTicks !==
-                            rfe.attackTimerMetronomeShowTicks,
-                          onReset: () => {
-                            if (
-                              attackTimerMetronomeShowTicks !==
-                              rfe.attackTimerMetronomeShowTicks
-                            ) {
-                              onAttackTimerMetronomeShowTicksToggle();
-                            }
-                          },
-                          searchId: gs(
-                            "attackTimerMetronome",
-                            "Show Attack Cooldown Ticks",
-                          ),
-                          children: (0, jsxRuntime.jsx)(OsrsCheckbox, {
-                            label: "Show Attack Cooldown Ticks",
-                            checked: attackTimerMetronomeShowTicks,
-                            onChange: () =>
-                              onAttackTimerMetronomeShowTicksToggle(),
-                          }),
-                        }),
-                        (0, jsxRuntime.jsx)(OverheadNumberPlacementRows, {
-                          pluginKey: "attackTimerMetronome",
-                          placement: {
-                            fontSize: attackTimerMetronomeFontSize,
-                            abovePrayerIcon:
-                              attackTimerMetronomeAbovePrayerIcon,
-                            offsetX: attackTimerMetronomeOffsetX,
-                            offsetY: attackTimerMetronomeOffsetY,
-                          },
-                          defaults: {
-                            fontSize: rfe.attackTimerMetronomeFontSize,
-                            abovePrayerIcon:
-                              rfe.attackTimerMetronomeAbovePrayerIcon,
-                            offsetX: rfe.attackTimerMetronomeOffsetX,
-                            offsetY: rfe.attackTimerMetronomeOffsetY,
-                          },
-                          disabled: !attackTimerMetronomeShowTicks,
-                          onAbovePrayerIconToggle:
-                            onAttackTimerMetronomeAbovePrayerIconToggle,
-                          onOffsetChange: onAttackTimerMetronomeOffsetChange,
-                          onFontSizeChange:
-                            onAttackTimerMetronomeFontSizeChange,
-                        }),
-                      ],
                     }),
                     (0, jsxRuntime.jsx)(PluginRow, {
                       label: "Attack Ranges",
@@ -48364,13 +48259,6 @@ function AppShell({ devHarness: devHarness } = {}) {
     cameraDragSpeed: cameraDragSpeed,
     cameraRightClickMovesCamera: cameraRightClickMovesCamera,
     cameraZoomIncrement: cameraZoomIncrement,
-    attackTimerMetronomeEnabled: attackTimerMetronomeEnabled,
-    attackTimerMetronomeShowBar: attackTimerMetronomeShowBar,
-    attackTimerMetronomeShowTicks: attackTimerMetronomeShowTicks,
-    attackTimerMetronomeFontSize: attackTimerMetronomeFontSize,
-    attackTimerMetronomeAbovePrayerIcon: attackTimerMetronomeAbovePrayerIcon,
-    attackTimerMetronomeOffsetX: attackTimerMetronomeOffsetX,
-    attackTimerMetronomeOffsetY: attackTimerMetronomeOffsetY,
     npcAttackTimerMetronomeEnabled: npcAttackTimerMetronomeEnabled,
     customMenuSwapsEnabled: customMenuSwapsEnabled,
     customMenuSwaps: customMenuSwaps,
@@ -48427,25 +48315,10 @@ function AppShell({ devHarness: devHarness } = {}) {
     fightStartCountdown: fightStartCountdown,
     fightStartCountdownTicks: fightStartCountdownTicks,
   } = hR;
-  const kp = (0, React.useMemo)(
-    () =>
-      attackTimerMetronomeEnabled && attackTimerMetronomeShowTicks
-        ? {
-            fontSize: attackTimerMetronomeFontSize,
-            abovePrayerIcon: attackTimerMetronomeAbovePrayerIcon,
-            offsetX: attackTimerMetronomeOffsetX,
-            offsetY: attackTimerMetronomeOffsetY,
-          }
-        : null,
-    [
-      attackTimerMetronomeEnabled,
-      attackTimerMetronomeShowTicks,
-      attackTimerMetronomeFontSize,
-      attackTimerMetronomeAbovePrayerIcon,
-      attackTimerMetronomeOffsetX,
-      attackTimerMetronomeOffsetY,
-    ],
-  );
+  // Attack Timer Metronome's bar style "Auto" follows Interface Styles' high detail health bars (client/plugins/attackTimerMetronome.js).
+  (0, React.useEffect)(() => {
+    setAttackTimerHdHealthBars(interfaceStylesEnabled && interfaceStylesHdHealthBars);
+  }, [interfaceStylesEnabled, interfaceStylesHdHealthBars]);
   const ku = bK();
   const [kv] = (0, React.useState)(() => eg(hR.antiAliasing, ku.status));
   const kw = rendererType;
@@ -53163,10 +53036,6 @@ function AppShell({ devHarness: devHarness } = {}) {
                                       cameraRightClickMovesCamera,
                                     cameraZoomIncrement: cameraZoomIncrement,
                                     showCameraDebug: showCameraDebug,
-                                    showAttackTimerMetronome:
-                                      attackTimerMetronomeEnabled &&
-                                      attackTimerMetronomeShowBar,
-                                    attackCooldownTicks: kp,
                                     showNpcAttackTimerMetronome:
                                       npcAttackTimerMetronomeEnabled,
                                     hdHealthBars:
@@ -53519,37 +53388,6 @@ function AppShell({ devHarness: devHarness } = {}) {
               cameraZoomIncrement: cameraZoomIncrement,
               onCameraZoomIncrementChange: (sP) =>
                 hS("cameraZoomIncrement", sP),
-              attackTimerMetronomeEnabled: attackTimerMetronomeEnabled,
-              onAttackTimerMetronomeToggle: () =>
-                hS("attackTimerMetronomeEnabled", !attackTimerMetronomeEnabled),
-              attackTimerMetronomeShowBar: attackTimerMetronomeShowBar,
-              onAttackTimerMetronomeShowBarToggle: () =>
-                hS("attackTimerMetronomeShowBar", !attackTimerMetronomeShowBar),
-              attackTimerMetronomeShowTicks: attackTimerMetronomeShowTicks,
-              onAttackTimerMetronomeShowTicksToggle: () =>
-                hS(
-                  "attackTimerMetronomeShowTicks",
-                  !attackTimerMetronomeShowTicks,
-                ),
-              attackTimerMetronomeFontSize: attackTimerMetronomeFontSize,
-              onAttackTimerMetronomeFontSizeChange: (sP) =>
-                hS("attackTimerMetronomeFontSize", sP),
-              attackTimerMetronomeAbovePrayerIcon:
-                attackTimerMetronomeAbovePrayerIcon,
-              onAttackTimerMetronomeAbovePrayerIconToggle: () =>
-                hS(
-                  "attackTimerMetronomeAbovePrayerIcon",
-                  !attackTimerMetronomeAbovePrayerIcon,
-                ),
-              attackTimerMetronomeOffsetX: attackTimerMetronomeOffsetX,
-              attackTimerMetronomeOffsetY: attackTimerMetronomeOffsetY,
-              onAttackTimerMetronomeOffsetChange: (sP, sQ) =>
-                hS(
-                  sP === "x"
-                    ? "attackTimerMetronomeOffsetX"
-                    : "attackTimerMetronomeOffsetY",
-                  sQ,
-                ),
               instantInventoryEnabled: instantInventoryEnabled,
               onInstantInventoryToggle: () =>
                 hS("instantInventoryEnabled", !instantInventoryEnabled),
