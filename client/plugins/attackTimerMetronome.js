@@ -4,7 +4,9 @@
 // from its options, their defaults and what it shows; no code of it is here.
 // Left out: its overlay layer choice ("Draw": the page has one layer for bars),
 // "Disable Font Size Scaling" (the number is never scaled here), its debug
-// logging and its deprecated switch.
+// logging and its deprecated switch. Its panel is named and grouped here as
+// the Plugins panel's others are, with fewer fonts and two bar switches kept
+// at their defaults (attackTimerMetronomeOptions).
 //
 // What is the application's own: the timer is the engine's. The plugin in the
 // game has to work an attack out from the player's animation and a table of
@@ -24,55 +26,55 @@
 import { createPluginStore, toHexColor } from "./pluginStore.js";
 
 const choices = (...pairs) => pairs.map(([value, label]) => ({ value, label }));
-const tickSection = "Attack Cooldown Tick Settings";
-const barSection = "Attack Bar";
 
-/** The options, in the order and with the defaults of the plugin's panel. */
+/**
+ * The options, with the plugin's defaults, named and grouped as the Plugins
+ * panel names the others' (Defence Tracker's). The keys are the plugin's.
+ * Left out of the panel: its fonts other than these four, and its "Empties
+ * Before Attack" and "Fills Before Attack", kept at their defaults (both on).
+ */
 export const attackTimerMetronomeOptions = [
-  { key: "showTick", label: "Show Attack Cooldown Ticks", section: tickSection, type: "boolean", default: true, info: "Shows number of ticks until next attack" },
-  { key: "fontSize", label: "Font Size (Overhead Tick Only)", section: tickSection, type: "number", min: 8, max: 50, default: 15, info: "Change the font size of the overhead attack cooldown ticks" },
-  // PLUGIN: java.awt.Color.CYAN for both.
-  { key: "numberColor", label: "Tick Number Color", section: tickSection, type: "color", default: "FF00FFFF", info: "Configures the color of tick number" },
-  { key: "lastColor", label: "Last Tick Color", section: tickSection, type: "color", default: "FF00FFFF", info: "Configures the color of tick number when it says 1" },
-  {
-    key: "fontType",
-    label: "Font Type",
-    section: tickSection,
-    type: "select",
-    choices: choices(["REGULAR", "RS Regular"], ["ARIAL", "Arial"], ["BOLD", "Bold"], ["CAMBRIA", "Cambria"], ["ROCKWELL", "Rockwell"], ["SEGOE_UI", "Segoe Ui"], ["TIMES_NEW_ROMAN", "Times New Roman"], ["VERDANA", "Verdana"]),
-    default: "REGULAR",
-    info: "Change the font of the tick number",
-  },
+  { key: "showTick", label: "Show tick number", section: "General", type: "boolean", default: true, info: "Shows the ticks until your next attack over your head" },
+  { key: "showBar", label: "Show attack bar", section: "General", type: "boolean", default: false, info: "Shows a bar over your head that runs down to your next attack" },
+  { key: "useZeroBasedTickCount", label: "Count down to 0", section: "Tick Number", type: "boolean", default: false, info: "Counts down to 0 instead of 1" },
+  { key: "showLostTicks", label: "Show late ticks", section: "Tick Number", type: "boolean", default: true, info: "Shows -1, -2 when an attack is late" },
+  { key: "maximumLostTicks", label: "Late ticks shown", section: "Tick Number", type: "number", min: 1, max: 20, default: 2, info: "How far past an attack the count keeps going" },
   {
     key: "ticksPosition",
-    label: "Ticks Position",
-    section: tickSection,
+    label: "Position",
+    section: "Tick Number",
     type: "select",
-    choices: choices(["DEFAULT", "Default"], ["TOP", "Top"], ["CENTERED", "Centered"], ["BOTTOM", "Bottom"]),
+    choices: choices(["DEFAULT", "Above head"], ["TOP", "Top"], ["CENTERED", "Centre of player"], ["BOTTOM", "At feet"]),
     default: "DEFAULT",
-    info: "Position of the tick number respective to the player",
+    info: "Where the tick number is drawn",
   },
-  { key: "tickHeightOffset", label: "Height Offset", section: tickSection, type: "number", min: -50, max: 50, default: 0, info: "Height offset for minor adjustments of the tick number" },
-  { key: "useZeroBasedTickCount", label: "Zero-based Tick Count", section: tickSection, type: "boolean", default: false, info: "Count ticks to 0 instead of 1" },
-  { key: "showLostTicks", label: "Show Lost Attack Ticks", section: tickSection, type: "boolean", default: true, info: "Show -1, -2, etc. when an attack is late." },
-  { key: "maximumLostTicks", label: "Maximum Lost Ticks", section: tickSection, type: "number", min: 1, max: 20, default: 2, info: "Largest negative value that will be shown after missing an attack." },
-  // PLUGIN: java.awt.Color.RED.
-  { key: "lostTickColor", label: "Lost Tick Color", section: tickSection, type: "color", default: "FFFF0000", info: "Color of the lost ticks." },
-  { key: "showBar", label: "Show Attack Bar", section: barSection, type: "boolean", default: false, info: "Show the attack bar" },
-  // PLUGIN: "Height Offset", as the number's; named apart here, where settings are searched by their names.
-  { key: "barHeightOffset", label: "Bar Height Offset", section: barSection, type: "number", min: -100, max: 100, default: 0, info: "Height offset for the bar from top of player model" },
-  { key: "barEmpties", label: "Empties Before Attack", section: barSection, type: "boolean", default: true, info: "Controls whether the attack bar will fully empty before a new attack can occur" },
-  { key: "barFills", label: "Fills Before Attack", section: barSection, type: "boolean", default: true, info: "Controls whether the attack bar will fill completely after an attack" },
-  { key: "barDrains", label: "Attack Bar Fills or Drains", section: barSection, type: "boolean", default: true, info: "Controls whether the attack bar will fill or drain as a cooldown" },
+  { key: "tickHeightOffset", label: "Y offset", section: "Tick Number", type: "number", min: -50, max: 50, default: 0, info: "Moves the number up (positive) or down (negative)" },
+  { key: "fontSize", label: "Font size", section: "Tick Number", type: "number", min: 8, max: 50, default: 15, info: "The size of the tick number" },
+  {
+    key: "fontType",
+    label: "Font",
+    section: "Tick Number",
+    type: "select",
+    choices: choices(["REGULAR", "RuneScape"], ["BOLD", "RuneScape bold"], ["ARIAL", "Arial"], ["VERDANA", "Verdana"]),
+    default: "REGULAR",
+    info: "The font of the tick number",
+  },
   {
     key: "barStyle",
-    label: "Attack Bar Style",
-    section: barSection,
+    label: "Style",
+    section: "Attack Bar",
     type: "select",
-    choices: choices(["AUTO", "Auto"], ["STANDARD", "Standard"], ["HIGH_DETAIL", "High Detail"]),
+    choices: choices(["AUTO", "Match Interface Styles"], ["STANDARD", "Standard"], ["HIGH_DETAIL", "High detail"]),
     default: "AUTO",
-    info: "Auto matches HD/SD from Interface Styles plugin. Standard forces the basic bar. High Detail forces the HD bar.",
+    info: "The bar's look; by default the same as your health bar's",
   },
+  { key: "barDrains", label: "Drain instead of fill", section: "Attack Bar", type: "boolean", default: true, info: "Starts full and empties, rather than starting empty and filling" },
+  // PLUGIN: "Height Offset", as the number's.
+  { key: "barHeightOffset", label: "Bar Y offset", section: "Attack Bar", type: "number", min: -100, max: 100, default: 0, info: "Moves the bar up (positive) or down (negative)" },
+  // PLUGIN: java.awt.Color.CYAN for the first two, RED for the last.
+  { key: "numberColor", label: "Number colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number" },
+  { key: "lastColor", label: "Last tick colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number on the last tick before an attack" },
+  { key: "lostTickColor", label: "Late tick colour", section: "Colours", type: "color", default: "FFFF0000", info: "The colour of -1, -2 when an attack is late" },
 ];
 export const attackTimerMetronomeStore = createPluginStore("attackTimerMetronome", attackTimerMetronomeOptions);
 
@@ -113,12 +115,8 @@ carryOverLegacySettings();
 // the client's RuneScape font, and its bold the RuneScape bold.
 const fontFamilies = {
   REGULAR: '"RuneScape Plain 12", sans-serif',
-  ARIAL: "Arial, sans-serif",
   BOLD: '"RuneScape Bold 12", sans-serif',
-  CAMBRIA: "Cambria, serif",
-  ROCKWELL: "Rockwell, serif",
-  SEGOE_UI: '"Segoe UI", sans-serif',
-  TIMES_NEW_ROMAN: '"Times New Roman", serif',
+  ARIAL: "Arial, sans-serif",
   VERDANA: "Verdana, sans-serif",
 };
 
@@ -189,8 +187,9 @@ export function getAttackTimerBar(state) {
   // one tick of "debounce" after the cooldown), then gone.
   if (ticks === null || ticks < 0) return null;
   const period = Math.max(1, state.attackSpeed ?? 1);
-  const numerator = ticks - (settings.barFills ? 1 : 0);
-  const denominator = period - (settings.barEmpties ? 1 : 0);
+  // PLUGIN: "Fills Before Attack" and "Empties Before Attack", on by default (not in the panel here).
+  const numerator = ticks - 1;
+  const denominator = period - 1;
   const fraction = denominator > 0 ? numerator / denominator : 0;
   const clamp = (value) => Math.max(0, Math.min(1, value));
   const hd = settings.barStyle === "HIGH_DETAIL" || (settings.barStyle === "AUTO" && hdHealthBars);
