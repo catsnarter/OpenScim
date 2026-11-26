@@ -11,7 +11,7 @@ register(new URL("../tools/determinism/node-hooks.mjs", import.meta.url).href);
 for (const name of ["self", "window"]) globalThis[name] ??= globalThis;
 const { scurriusAudio } = await import("../client/encounters/scurrius/audio.js");
 
-const { inferno_visual: visual } = scurriusAudio.rules;
+const { inferno_visual: visual, zuk_attack: attack } = scurriusAudio.rules;
 const pass = { kind: "pass" };
 const play = (...sound) => ({ kind: "play", sound });
 const event = (fields) => ({ type: "inferno_visual", eventId: 1, tick: 9, animations: [], projectiles: [], graphics: [], ...fields });
@@ -20,6 +20,10 @@ const onTile = (spotAnimId, x, y) => ({ spotAnimId, target: { kind: "tile", posi
 const onPlayer = (spotAnimId) => ({ spotAnimId, target: { kind: "actor", actorId: "player" }, height: 0, delayCycles: 0 });
 const stomp = [7699, 7667].map((id) => ({ id, range: 9, position: [34, 11], channel: "area" }));
 const brick = (x, y) => ({ id: 4175, range: 5, delayCycles: 240, channel: "area", position: [x, y] });
+
+// A bolt, heard from his cast on through its flight; nothing for his other attacks or another fight's.
+assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: "scurrius_magic" }), play({ id: 7700, channel: "sfx" }));
+for (const kind of ["scurrius_ranged", "scurrius_melee", "leviathan_magic", undefined]) assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: kind }), pass, String(kind));
 
 // A stomp, at a pile or not: the two sounds from the middle, and a brick on each tile of rubble as it lands.
 for (const clipId of ["stomp", "feedingStomp"]) {
@@ -43,6 +47,6 @@ assert.deepEqual(visual.resolve({ type: "inferno_visual" }), pass);
 
 const listed = new Set(readCacheGroups()[4]);
 const ids = Object.values(scurriusAudio.rules).flatMap((rule) => rule.preloadIds);
-assert.deepEqual([...new Set(ids)].sort((a, b) => a - b), [227, 4175, 7667, 7670, 7696, 7699]);
+assert.deepEqual([...new Set(ids)].sort((a, b) => a - b), [227, 4175, 7667, 7670, 7696, 7699, 7700]);
 for (const id of ids) assert.ok(listed.has(id), `sound ${id} is not under "4" in a list of tools/assets/cache-groups.mjs`);
-console.log("Scurrius' 6 sounds answer his own events, and all are in the cache list");
+console.log("Scurrius' 7 sounds answer his own events, and all are in the cache list");

@@ -1,9 +1,10 @@
 // Scurrius' sounds that are in no animation. The game's server sends them, so
 // here they are rules, keyed by the type of a tick event
-// (docs/ADDING-AN-ENCOUNTER.md, section 5, `audio`): the falling bricks, and
-// his bolts and fur balls as they land on the player. The layers of all
-// encounters hear every event, so these answer his own alone: his stomp, and
-// a landing he marks (`scurriusLanding`, encounter.js). The sounds of the
+// (docs/ADDING-AN-ENCOUNTER.md, section 5, `audio`): the falling bricks, a
+// bolt in flight, and his bolts and fur balls as they land on the player. The
+// layers of all encounters hear every event, so these answer his own alone:
+// his stomp, his bolt's attack, and a landing he marks (`scurriusLanding`,
+// encounter.js). The sounds of the
 // frames of his animations and his rats' are in the cache with them, and the
 // scene plays those.
 //
@@ -20,6 +21,10 @@ const landingSounds = {
   [spotAnims.rangedImpact]: toPlayer(7696), // 15 of 15 fur balls
 };
 
+// A bolt as he casts it, heard on through its flight: 18 of 18 bolts, on the
+// tick of his cast (his attack's `kind`, encounter.js).
+const boltSound = toPlayer(7700);
+
 // Heard from a tile. Each stomp: two sounds from the middle of the room,
 // whatever tile he stomps on (24 of 24 stomps, at 34,11, range 9). Each tile
 // of rubble: a sound sent with its graphic and played 240 cycles later, as the
@@ -32,6 +37,10 @@ const play = (sounds) => (sounds.length > 0 ? { kind: "play", sound: sounds } : 
 export const scurriusAudio = {
   layerName: "scurrius",
   rules: {
+    zuk_attack: {
+      preloadIds: [boltSound.id],
+      resolve: ({ attack }) => play(attack === "scurrius_magic" ? [boltSound] : []),
+    },
     inferno_visual: {
       preloadIds: [...Object.values(landingSounds), ...stompSounds, brickSound].map(({ id }) => id),
       resolve({ animations = [], graphics = [], scurriusLanding = false }) {
