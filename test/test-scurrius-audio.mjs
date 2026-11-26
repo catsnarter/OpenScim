@@ -21,9 +21,15 @@ const onPlayer = (spotAnimId) => ({ spotAnimId, target: { kind: "actor", actorId
 const stomp = [7699, 7667].map((id) => ({ id, range: 9, position: [34, 11], channel: "area" }));
 const brick = (x, y) => ({ id: 4175, range: 5, delayCycles: 240, channel: "area", position: [x, y] });
 
-// A bolt, heard from his cast on through its flight; nothing for his other attacks or another fight's.
+// A bolt (heard on through its flight) and a fur ball as he casts them; nothing for his swipe or another fight's attacks.
 assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: "scurrius_magic" }), play({ id: 7700, channel: "sfx" }));
-for (const kind of ["scurrius_ranged", "scurrius_melee", "leviathan_magic", undefined]) assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: kind }), pass, String(kind));
+assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: "scurrius_ranged" }), play({ id: 7722, channel: "sfx" }));
+for (const kind of ["scurrius_melee", "leviathan_magic", "leviathan_range", undefined]) assert.deepEqual(attack.resolve({ type: "zuk_attack", attack: kind }), pass, String(kind));
+
+// His call of the rats, at a pile or in the middle: from the middle of the room, 90 cycles on.
+for (const clipId of ["feedingSummon", "enragedSummon"]) {
+  assert.deepEqual(visual.resolve(event({ animations: clip(clipId) })), play({ id: 7717, range: 9, position: [34, 11], delayCycles: 90, channel: "area" }), clipId);
+}
 
 // A stomp, at a pile or not: the two sounds from the middle, and a brick on each tile of rubble as it lands.
 for (const clipId of ["stomp", "feedingStomp"]) {
@@ -36,6 +42,7 @@ for (const [id, sound] of [[2641, 7670], [85, 227], [2643, 7696]]) {
 // Not his: another fight's stomp or splash, rubble with no stomp of his, the casts themselves.
 const silent = [
   { animations: clip("stomp", "zebak") },
+  { animations: clip("enragedSummon", "zebak") },
   { graphics: [onPlayer(85)] },
   { graphics: [onTile(2644, 30, 8)] },
   { animations: clip("melee") },
@@ -47,6 +54,6 @@ assert.deepEqual(visual.resolve({ type: "inferno_visual" }), pass);
 
 const listed = new Set(readCacheGroups()[4]);
 const ids = Object.values(scurriusAudio.rules).flatMap((rule) => rule.preloadIds);
-assert.deepEqual([...new Set(ids)].sort((a, b) => a - b), [227, 4175, 7667, 7670, 7696, 7699, 7700]);
+assert.deepEqual([...new Set(ids)].sort((a, b) => a - b), [227, 4175, 7667, 7670, 7696, 7699, 7700, 7717, 7722]);
 for (const id of ids) assert.ok(listed.has(id), `sound ${id} is not under "4" in a list of tools/assets/cache-groups.mjs`);
-console.log("Scurrius' 7 sounds answer his own events, and all are in the cache list");
+console.log("Scurrius' 9 sounds answer his own events, and all are in the cache list");
