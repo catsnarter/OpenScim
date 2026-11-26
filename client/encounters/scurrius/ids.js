@@ -13,6 +13,7 @@ export const npcTypeIds = {
 export const seqIds = {
   idle: 10687, // CACHE: the stand of his NPC type
   walk: 10690, // CACHE: the walk of his NPC type
+  run: 10691, // OBS (Encounter Recorder): his pose on his two-tile-a-tick runs, to a pile (encounter.js)
   spawn: 10686, // CACHE npc_rat_boss_spawn_01 (tsps)
   melee: 10693, // CACHE, OBS (tsps): the tail swipe
   ranged: 10694, // CACHE, OBS (tsps)

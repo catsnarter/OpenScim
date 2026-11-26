@@ -331,6 +331,8 @@ class ScurriusEncounter {
       // the east pile), as the lockFacing note above says; held until he arrives.
       faceActorToward(boss, { position: path[path.length - 1], size: bossSize });
       this.lockFacing(boss);
+      // OBS (Encounter Recorder): two tiles a tick, he runs (his run sequence, ids.js); one, he walks.
+      if (path.length > 1) this.animate(context, "run");
       return [{ npcId: boss.id, path }];
     }
     if (this.phase === "one" || this.phase === "between") return getNpcPursuitMoves(boss, context);

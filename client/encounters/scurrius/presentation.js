@@ -16,6 +16,8 @@ const renderConfig = {
       idleSeqId: seqIds.idle,
       walkSeqId: seqIds.walk,
       attackClips: {
+        // His run: the scene has a walk of his type alone, so a run is played as a clip each tick of it (encounter.js).
+        run: seqIds.run,
         melee: seqIds.melee,
         ranged: seqIds.ranged,
         magic: seqIds.magic,
