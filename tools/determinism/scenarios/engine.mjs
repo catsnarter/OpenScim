@@ -889,6 +889,25 @@ export const scenarios = [
     },
   },
   {
+    // Four melee specials (WIKI: each weapon's page): the dragon mace's Shatter (+25% accuracy, +50% damage, 25%), the
+    // dragon sword's Wild Stab (+25% and +25%, 40%), the Saradomin sword's Saradomin's Lightning (+10% damage and
+    // 1-16 more when the hit lands, 100%) and the dragon longsword's Cleave (+25% max hit, 25%). Sixty ticks each:
+    // this Yama cannot be hit for a stretch of every minute, whatever the weapon.
+    name: "engine/melee-specials",
+    kind: "yama_p3",
+    seed: 53,
+    ticks: 60 * 4,
+    mechanics: { ...dummy, infiniteSpecialAttack: true },
+    ...meleeGear,
+    equipment: { ...meleeGear.equipment, weapon: undefined },
+    inventory: [1434 /* Dragon mace */, 21009 /* Dragon sword */, 11838 /* Saradomin sword */, 1305 /* Dragon longsword */],
+    script(tick, api) {
+      if (tick === 1) offensive(api, "Piety");
+      eachPeriod(tick, 1, 60, 4, (index) => (equip(api, index, "weapon"), attack(api, boss(api).id)));
+      if (!api.player().isSpecialAttackActive) special(api);
+    },
+  },
+  {
     // An accurate hit that does no damage. In the Glyphic Attenuation contract damage is multiplied by 1 + 0.0155 per
     // point of prayer bonus; the Ruinous powers book has -1, and a hit of 1 (all a player of 1 Strength rolls, half
     // the time) is floored to 0. The warhammer's Defence drain needs damage, so the engine sorts the special's effects

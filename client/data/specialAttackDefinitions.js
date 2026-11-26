@@ -326,12 +326,16 @@ var specialAttackDefinitionByWeaponId = {
     defenceStyle: "melee_slash",
     animationId: 3300,
   },
+  // Dragon longsword, Cleave: 25%, against slash (WIKI)
   1305: {
     defenceStyle: "melee_slash",
+    energyCost: 25,
     animationId: 1058,
   },
+  // Dragon sword (the wiki's Dragon shortsword), Wild Stab: 40% (WIKI). Protect from Melee is not ignored here.
   21009: {
     defenceStyle: "melee_stab",
+    energyCost: 40,
     animationId: 7515,
   },
   4587: {
@@ -391,8 +395,10 @@ var specialAttackDefinitionByWeaponId = {
       },
     ],
   },
+  // Dragon mace, Shatter: 25% (WIKI)
   1434: {
     defenceStyle: "melee_crush",
+    energyCost: 25,
     animationId: 1060,
   },
   11061: {
@@ -487,7 +493,10 @@ var specialAttackDefinitionByWeaponId = {
       height: 96,
     },
   },
+  // Saradomin sword, Saradomin's Lightning: 100%, against slash (WIKI)
   11838: {
+    defenceStyle: "melee_slash",
+    energyCost: 100,
     animationId: 1132,
   },
   12809: {

@@ -496,7 +496,22 @@ var dragonClawsAllMissOutcomes = [
     damages: [0, 1, 0, 1],
   },
 ];
+// Saradomin's Lightning, the Saradomin sword's special (WIKI: Saradomin sword):
+// "10% more melee damage" and "1-16 extra Magic damage"; "If the melee attack
+// misses, then the Magic attack will also fail." Rolled against slash
+// (specialAttackDefinitions.js). The extra hit is not a magic attack to the
+// engine here (protection prayers and magic immunities do not see it).
+var saradominSwordSpecialProfile = {
+  kind: "secondHitIfFirstAccurate",
+  maxHit: { kind: "staged", stages: [{ numerator: 11, denominator: 10 }] },
+  first: { accuracy: { kind: "standard" }, damage: { kind: "uniformToMaxHit" } },
+  second: { accuracy: { kind: "guaranteed" }, damage: { kind: "uniform", minimumInclusive: 1, maximumInclusive: 16 } },
+};
 var specialAttackProfileByWeaponId = new Map([
+  [1434, buildBoostedSingleHitProfile(RATIO_5_OVER_4, RATIO_3_OVER_2)], // Dragon mace, Shatter: +25% accuracy, +50% damage (WIKI)
+  [1305, buildBoostedSingleHitProfile(RATIO_ONE, RATIO_5_OVER_4)], // Dragon longsword, Cleave: "raises the player's maximum hit by 25% for one hit" (WIKI)
+  [21009, buildBoostedSingleHitProfile(RATIO_5_OVER_4, RATIO_5_OVER_4)], // Dragon sword (the wiki's Dragon shortsword), Wild Stab: +25%, +25% (WIKI)
+  [11838, saradominSwordSpecialProfile], // Saradomin sword
   [27665, accursedSceptreSpecialProfile], // Accursed sceptre
   [27679, accursedSceptreSpecialProfile], // Accursed sceptre (a)
   [27676, accursedSceptreSpecialProfile], // Accursed sceptre (au)
