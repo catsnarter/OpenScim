@@ -694,6 +694,18 @@ function selectBaseProfile(canonicalInput) {
     if (canonicalInput.weaponId === SEERCULL_ID) {
       return buildSeercullSoulshotProfile(canonicalInput);
     }
+    if (halberdSweepIdSet.has(canonicalInput.weaponId)) {
+      return buildHalberdSweepProfile(canonicalInput);
+    }
+    if (armadylCrossbowIdSet.has(canonicalInput.weaponId)) {
+      return buildArmadylEyeProfile(canonicalInput);
+    }
+    if (dragonCrossbowIdSet.has(canonicalInput.weaponId)) {
+      return buildAnnihilateProfile(canonicalInput);
+    }
+    if (ballistaIdSet.has(canonicalInput.weaponId)) {
+      return buildConcentratedShotProfile(canonicalInput);
+    }
     const specialAttackProfile = specialAttackProfileByWeaponId.get(canonicalInput.weaponId);
     if (undefined !== specialAttackProfile) {
       return specialAttackProfile;
@@ -1187,6 +1199,78 @@ function buildZaryteEvokeProfile(profileInput) {
         kind: "uniformToMaxHit",
       },
       ...getEnchantedBoltProc(profileInput, true),
+    },
+  };
+}
+// Sweep, the dragon and crystal halberds' special (WIKI: Dragon halberd,
+// Crystal halberd, Special attacks): "Damage in all cases is increased by 10%
+// of your max hit"; against a target larger than 1x1 it hits twice, each hit
+// rolled separately, "the second hit has -25% accuracy". Against a 1x1 target
+// it is one hit; the multi-combat sweep onto up to 10 nearby NPCs (a 3x1 line
+// on the target) is not modelled. Rolls against slash (specialAttackDefinitions.js).
+var halberdSweepIdSet = new Set([3204, 23987]); // Dragon halberd, Crystal halberd (24125 is a variant of 23987)
+var SWEEP_MAX_HIT_RATIO = { numerator: 11, denominator: 10 };
+var SWEEP_SECOND_HIT_ACCURACY_RATIO = { numerator: 3, denominator: 4 };
+function buildHalberdSweepProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  const maxHit = { kind: "staged", stages: [...formulaStages.maxHitStages, SWEEP_MAX_HIT_RATIO] };
+  const accuracy = standardAccuracyFromStages(formulaStages.attackRollStages);
+  if ((profileInput.targetSize ?? 1) <= 1) {
+    return { kind: "singleHit", maxHit, hit: { accuracy, damage: { kind: "uniformToMaxHit" } } };
+  }
+  return {
+    kind: "independentMultiHit",
+    maxHit,
+    accuracy,
+    maximumFractions: [RATIO_ONE, RATIO_ONE],
+    hitAttackRollStages: [[], [SWEEP_SECOND_HIT_ACCURACY_RATIO]],
+  };
+}
+// Armadyl Eye, the Armadyl crossbow's special (WIKI: Armadyl crossbow): one
+// shot at double accuracy, and the enchanted bolt's chance doubled ("diamond
+// bolts (e) ... from 10% to 20%"). The Hard Kandarin Diary's bonus is not modelled.
+var armadylCrossbowIdSet = new Set([11785]);
+function buildArmadylEyeProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  const bolt = getEnchantedBoltProc(profileInput);
+  return {
+    kind: "singleHit",
+    maxHit: maxHitSpecFromStages(formulaStages.maxHitStages),
+    hit: {
+      accuracy: standardAccuracyFromStages([...formulaStages.attackRollStages, RATIO_DOUBLE]),
+      damage: { kind: "uniformToMaxHit" },
+      ...(bolt.proc === undefined ? {} : { proc: { ...bolt.proc, chancePercent: bolt.proc.chancePercent * 2 } }),
+    },
+  };
+}
+// Annihilate, the dragon crossbow's special (WIKI: Dragon crossbow): 20% more
+// damage on the target; enchanted bolts "cannot activate their effects". The
+// multi-combat 3x3 splash (each further target 80% of the one before) is not
+// modelled: in single-way combat it "only hit[s] one target with 20% extra damage".
+var dragonCrossbowIdSet = new Set([21902]);
+var ANNIHILATE_MAX_HIT_RATIO = { numerator: 6, denominator: 5 };
+function buildAnnihilateProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  return {
+    kind: "singleHit",
+    maxHit: { kind: "staged", stages: [...formulaStages.maxHitStages, ANNIHILATE_MAX_HIT_RATIO] },
+    hit: {
+      accuracy: standardAccuracyFromStages(formulaStages.attackRollStages),
+      damage: { kind: "uniformToMaxHit" },
+    },
+  };
+}
+// Concentrated Shot, the light and heavy ballistas' special (WIKI: Heavy
+// ballista): "25% increased accuracy" and 25% more damage, one shot, no extra delay.
+var ballistaIdSet = new Set([19478, 19481]); // Light ballista, Heavy ballista
+function buildConcentratedShotProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  return {
+    kind: "singleHit",
+    maxHit: { kind: "staged", stages: [...formulaStages.maxHitStages, RATIO_5_OVER_4] },
+    hit: {
+      accuracy: standardAccuracyFromStages([...formulaStages.attackRollStages, RATIO_5_OVER_4]),
+      damage: { kind: "uniformToMaxHit" },
     },
   };
 }

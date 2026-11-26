@@ -408,12 +408,15 @@ var specialAttackDefinitionByWeaponId = {
   1377: {
     animationId: 1056,
   },
+  // Dragon and crystal halberd, Sweep: 30% (WIKI: Special attacks)
   3204: {
     defenceStyle: "melee_slash",
+    energyCost: 30,
     animationId: 1203,
   },
   23987: {
     defenceStyle: "melee_slash",
+    energyCost: 30,
     animationId: 1203,
   },
   23986: {
@@ -543,13 +546,18 @@ var specialAttackDefinitionByWeaponId = {
   12788: {
     animationId: 426,
   },
+  // Light and heavy ballista, Concentrated Shot: 65% (WIKI: Heavy ballista)
   19478: {
+    energyCost: 65,
     animationId: 7555,
   },
   19481: {
+    energyCost: 65,
     animationId: 7555,
   },
+  // Dragon crossbow, Annihilate: 60% (WIKI: Dragon crossbow)
   21902: {
+    energyCost: 60,
     animationId: 4230,
   },
   26219: {

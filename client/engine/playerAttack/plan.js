@@ -120,9 +120,17 @@ function buildPlannedHitsForProfile(profile, attackContext) {
       ];
     case "independentMultiHit": {
       const [firstMaximumFraction, ...otherMaximumFractions] = profile.maximumFractions;
+      // `hitAttackRollStages[i]`: stages applied to hit i's attack roll only
+      // (the halberd's Sweep: the second hit at 25% less accuracy).
+      const hitAccuracy = (index) => {
+        const extraStages = profile.hitAttackRollStages?.[index];
+        return extraStages === undefined || extraStages.length === 0 || profile.accuracy.kind === "guaranteed"
+          ? profile.accuracy
+          : { ...profile.accuracy, attackRollStages: [...(profile.accuracy.attackRollStages ?? []), ...extraStages] };
+      };
       return [
-        buildMaxHitFractionHit(firstMaximumFraction, profile.accuracy, attackContext),
-        ...otherMaximumFractions.map((maximumFraction) => buildMaxHitFractionHit(maximumFraction, profile.accuracy, attackContext)),
+        buildMaxHitFractionHit(firstMaximumFraction, hitAccuracy(0), attackContext),
+        ...otherMaximumFractions.map((maximumFraction, index) => buildMaxHitFractionHit(maximumFraction, hitAccuracy(index + 1), attackContext)),
       ];
     }
     case "secondHitIfFirstAccurate":
