@@ -402,7 +402,8 @@ class ScurriusEncounter {
   }
 
   // The tail swipe: melee, landing on the swing's tick (OBS, tsps; OBS, Encounter Recorder: all 32 swipes of three
-  // solo kills, rev 243, up to 13). inferred: slash (the wiki names no style, and a hitsplat shows none).
+  // solo kills, rev 243, up to 13; a fourth: Protect from Melee blocked all 9 it was up for). inferred: slash (the wiki
+  // names no style, and a hitsplat shows none).
   swipe(boss, player, context) {
     const attack = rollNpcAttack({
       attacker: boss,

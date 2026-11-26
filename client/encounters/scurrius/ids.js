@@ -2,7 +2,7 @@
 // RSPSApp/tsps (docs/scurrius.md, server/plugins/bosses/scurrius/) lists them
 // from the cache and its rsprox captures. Tiles are local to map square
 // 51,154 (region 13210): tsps gives them in world coordinates, and a local
-// tile is the world one minus (3264, 9856). "Encounter Recorder" below is three
+// tile is the world one minus (3264, 9856). "Encounter Recorder" below is four
 // solo kills recorded with that RuneLite plugin (rev 243, 2026-11-26).
 export const npcTypeIds = {
   solo: 7222, // CACHE rat_boss_instance, 3x3; TABLE "Scurrius" (Solo), 500 hitpoints
