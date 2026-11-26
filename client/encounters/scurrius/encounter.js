@@ -30,7 +30,8 @@
 // variant; his eating idle as his stand at a pile (a base animation the
 // default scene has no way to change); the projectiles leaving from a back
 // corner of his body (tsps); the rat bone weapons (+10 against rats, and no
-// attack delay on his rats: WIKI); sounds of the encounter's own.
+// attack delay on his rats: WIKI); of his sounds that are in no animation
+// (audio.js), all but the bricks and the bolts and fur balls landing.
 import { getMonsterFormulaStats, getMonsterHitpoints } from "../../engine/monsterStats.js";
 import { createSeededRandom } from "../../engine/random.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
@@ -59,7 +60,7 @@ const debrisDelayCycles = 60; // OBS (tsps): the rubble's graphic, delayed 60 cy
 const distantHitTicks = 4; // OBS (tsps): 47 of 52 casts landed 4 ticks after, whatever the distance
 // OBS (tsps): the projectiles fly from 30 to 120 cycles, 50 to 25 high, slope 40.
 const flight = { startDelayCycles: 30, endDelayCycles: 120, slope: 40, startOffset: 0, startHeight: 50, endHeight: 25 };
-const splashSpotAnim = 85; // OBS (tsps): a bolt that misses splashes
+export const splashSpotAnim = 85; // OBS (tsps): a bolt that misses splashes
 const feedHeals = [3, 5]; // OBS (tsps): 3 to 5 heals a round, 10 rounds
 const healWeights = [[10, 2], [5, 1]]; // OBS (tsps): 10 in 26 of 38 heals with no rats alive (WIKI: 5 or 10)
 const healWithRats = 5; // OBS (tsps): 5 in all 4 heals with rats alive (WIKI: they get in the way)
@@ -436,7 +437,8 @@ class ScurriusEncounter {
     const impact = magic ? (attack.accuracySucceeded ? spotAnims.magicImpact : splashSpotAnim) : spotAnims.rangedImpact;
     this.later(distantHitTicks, (ctx) => {
       if (!this.boss(ctx.world)?.alive) return;
-      this.animate(ctx, null, [onActor(impact, ctx.world.getPlayer())]);
+      // scurriusLanding: what audio.js hears it by (the splash's graphic is every fight's).
+      emitInfernoVisual(ctx.tickEvents, { animations: [], projectiles: [], graphics: [onActor(impact, ctx.world.getPlayer())], scurriusLanding: true });
     });
     return attack;
   }

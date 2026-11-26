@@ -1,6 +1,8 @@
 // What draws Scurrius: the default scene, with his sequences and his rats',
-// and the spot animations of his attacks. The ids are the game cache's (ids.js).
+// and the spot animations of his attacks; his sounds that are in no animation
+// (audio.js). The ids are the game cache's (ids.js).
 import { buildScene } from "../shared/buildScene.js";
+import { scurriusAudio } from "./audio.js";
 import { scurriusKind, scurriusMapSquare, bossActorId } from "./encounter.js";
 import { npcTypeIds, seqIds, spotAnims, bossStart, bossSize } from "./ids.js";
 
@@ -43,6 +45,7 @@ export const presentation = (BaseScene) => ({
   sceneBuilder: (context) => buildScene(BaseScene, renderConfig, context),
   // The player comes in from the west: the camera looks east, over his shoulder.
   defaultCamera: { yaw: 270, pitch: -45, zoom: 360 },
+  audio: scurriusAudio,
   presentation: {
     title: "Scurrius",
     tagline: "Varrock Sewers",
