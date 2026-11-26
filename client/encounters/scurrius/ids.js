@@ -2,7 +2,8 @@
 // RSPSApp/tsps (docs/scurrius.md, server/plugins/bosses/scurrius/) lists them
 // from the cache and its rsprox captures. Tiles are local to map square
 // 51,154 (region 13210): tsps gives them in world coordinates, and a local
-// tile is the world one minus (3264, 9856).
+// tile is the world one minus (3264, 9856). "Encounter Recorder" below is three
+// solo kills recorded with that RuneLite plugin (rev 243, 2026-11-26).
 export const npcTypeIds = {
   solo: 7222, // CACHE rat_boss_instance, 3x3; TABLE "Scurrius" (Solo), 500 hitpoints
   public: 7221, // CACHE rat_boss_normal; TABLE "Scurrius" (Group), 1,500 hitpoints. Not fought here yet
@@ -26,8 +27,9 @@ export const seqIds = {
   death: 10705, // CACHE, OBS (tsps)
   ratIdle: 4931, // CACHE: the stand of the rat's NPC type
   ratWalk: 4932, // CACHE: the walk of the rat's NPC type
-  ratAttack: 4933, // inferred: the rat sequence after its walk
-  ratDeath: 4935, // inferred: as above, two further on
+  ratAttack: 4933, // OBS (Encounter Recorder): each bite, 4 ticks apart (30 of 33 gaps)
+  ratBlock: 4934, // OBS (Encounter Recorder): as the killing hit comes in, 12 of 19 deaths. Not played: the engine plays a block only on a hit the NPC lives through
+  ratDeath: 4935, // OBS (Encounter Recorder): after the killing hit, in all 19 deaths
 };
 
 export const spotAnims = {

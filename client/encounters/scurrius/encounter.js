@@ -47,7 +47,7 @@ export const scurriusMapSquare = mapSquare;
 export const bossActorId = "scurrius";
 
 const firstAttackTick = 4; // OBS (tsps): he attacks 4 ticks after he appears
-const attackSpeed = 4; // TABLE, OBS (tsps)
+const attackSpeed = 4; // TABLE, OBS (tsps; Encounter Recorder: his swipes 4 ticks apart)
 const feedingSpeeds = [6, 7]; // OBS (tsps): 6 or 7 ticks while he eats
 const feedThreshold = 0.8; // WIKI
 const enrageThreshold = 0.3; // WIKI
@@ -401,7 +401,8 @@ class ScurriusEncounter {
     emitInfernoVisual(context.tickEvents, { animations: clipId ? [{ actorId: bossActorId, clipId, delayCycles: 0 }] : [], projectiles: [], graphics });
   }
 
-  // The tail swipe: melee, landing on the swing's tick (OBS, tsps). inferred: slash (the wiki names no style).
+  // The tail swipe: melee, landing on the swing's tick (OBS, tsps; OBS, Encounter Recorder: all 32 swipes of three
+  // solo kills, rev 243, up to 13). inferred: slash (the wiki names no style, and a hitsplat shows none).
   swipe(boss, player, context) {
     const attack = rollNpcAttack({
       attacker: boss,
