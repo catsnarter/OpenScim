@@ -43,14 +43,16 @@ try {
   });
   assert.deepEqual(setup, { weapon: 4151, shield: 12954, items: 28 });
 
-  // At 79% he runs to a food pile, eats there and, before long, calls his rats.
+  // At 79% he runs to a food pile, eats there and, before long, calls his rats. The page's fight is seeded at
+  // random, and an eating turn is a call 1 time in 11 (encounter.js): 300 ticks (some 24 turns) went without one
+  // about 1 time in 10; 1,500 ticks, about 1 in 100,000.
   const eating = await page.evaluate(() => {
     engine.setMechanicsConfig({ ...engine.mechanicsConfig, infiniteHealth: true });
     engine.setBossHp(395);
     const state = () => engine.getEncounterSnapshot().state;
     const rats = () => engine.worldState.getNpcs().filter((npc) => npc.npcTypeId === 7223 && npc.alive).length;
     let ate = false;
-    for (let tick = 0; tick < 300 && rats() === 0; tick++) {
+    for (let tick = 0; tick < 1500 && rats() === 0; tick++) {
       engine.advanceTick(engine.player().position);
       ate ||= state().phase === "feeding" && state().pile !== null;
     }
