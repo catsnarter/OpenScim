@@ -284,8 +284,9 @@ class ScurriusEncounter {
         return;
       }
       this.phase = "stepping";
-      this.walkTo(this.pick(ways), 1, () => {
+      this.walkTo(this.pick(ways), 1, (arrived) => {
         if (this.phase !== "stepping") return;
+        this.unlockFacing(arrived); // back to the player, to swipe
         this.phase = "between";
         this.nextAt = Math.max(this.nextAt, this.now + 1); // inferred: he swings once his walk is done
       });
@@ -322,6 +323,10 @@ class ScurriusEncounter {
         this.walk.stalls++;
         return [];
       }
+      // OBS (Encounter Recorder): on his way he no longer faces the player but where he goes (east, all the way to
+      // the east pile), as the lockFacing note above says; held until he arrives.
+      faceActorToward(boss, { position: path[path.length - 1], size: bossSize });
+      this.lockFacing(boss);
       return [{ npcId: boss.id, path }];
     }
     if (this.phase === "one" || this.phase === "between") return getNpcPursuitMoves(boss, context);
