@@ -27,6 +27,7 @@ import { getAmmoRefusalMessage } from "../ammunition.js";
 import { isConflictionGauntletsAttack, isSameConflictionAttack } from "./projection.js";
 import { getChinchompaAreaConfig } from "./formula.js";
 import { planPlayerAttack, summarizePrimaryHitAccuracy, rollAttackPlanOutcome } from "./planPlayerAttack.js";
+import { isRatBoneWeapon } from "./profiles.js";
 function resolveValueOrCallback(valueOrCallback, encounterContext) {
   if (typeof valueOrCallback == "function") {
     return valueOrCallback(encounterContext);
@@ -843,6 +844,13 @@ function performPlayerAutoAttack(player, deps) {
     return;
   }
   if (isTileInsideFootprint(player.position, target.position, target.size)) {
+    return;
+  }
+  // WIKI (Bone mace, Bone shortbow, Bone staff): "You can only use this weapon against rats", manual casts included;
+  // the attack is given up. inferred: said when the attack would be made, as an ammunition refusal is.
+  if (isRatBoneWeapon(player.equipment.weapon) && !target.formulaStats?.attributes?.includes("rat")) {
+    deps.tickEvents.emit({ type: "game_message", kind: "game", segments: [{ text: "You can only use this weapon against rats." }] });
+    clearPlayerAttackTarget(player);
     return;
   }
   const nextAttackTick = deps.combatSystem.getNextAttackTick(player.id);
