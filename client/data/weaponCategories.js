@@ -1,6 +1,7 @@
 import { defaultSpellbook } from "../engine/playerState.js";
 import { getBaseItemId } from "./itemVariants.js";
 import { getSpellDefinition } from "./combatSpells.js";
+import { getEquipmentDefinition } from "./equipment.js";
 var weaponCategoryDefinitions = {
   "2h_sword": {
     name: "2h Sword",
@@ -825,12 +826,33 @@ function getActiveSpell({
   }
   return getDefaultStaffSpell(weaponId, spellbook);
 }
+// A weapon the table above does not name takes the category the equipment
+// list gives it (equipment.js, generated from the wiki: "Stab Sword",
+// "Crossbow", ...), as the key of weaponCategoryDefinitions it names. A
+// category with no definition here (Flail, Gun, Multi-Melee, Multi-Style,
+// Polestaff, Salamander) and "Unarmed" give none: such a weapon stays
+// unarmed, as before. The table wins where it names a weapon. Bladed staves
+// (Toxic staff of the dead, Staff of light, ...) are staves, as the table
+// already has the Staff of the dead (11791).
+var weaponCategoryKeyBySyncedName = { Chinchompas: "chinchompa", "Bladed Staff": "staff" };
+function getSyncedWeaponCategory(itemId) {
+  const definition = getEquipmentDefinition(itemId);
+  if ((definition?.slot !== "weapon" && definition?.slot !== "2h") || !definition.category || definition.category === "Unarmed") {
+    return undefined;
+  }
+  const key = weaponCategoryKeyBySyncedName[definition.category] ?? definition.category.toLowerCase().replace(/ /g, "_");
+  return weaponCategoryDefinitions[key] ? key : undefined;
+}
+// Whether the table above names the weapon (its category is not the equipment list's).
+function hasListedWeaponCategory(weaponId) {
+  return weaponId !== undefined && weaponCategoryByItemId[getBaseItemId(weaponId)] !== undefined;
+}
 function getWeaponCategory(weaponId) {
   if (weaponId === undefined) {
     return undefined;
-  } else {
-    return weaponCategoryByItemId[getBaseItemId(weaponId)];
   }
+  const baseWeaponId = getBaseItemId(weaponId);
+  return weaponCategoryByItemId[baseWeaponId] ?? getSyncedWeaponCategory(baseWeaponId) ?? getSyncedWeaponCategory(weaponId);
 }
 function getWeaponCategoryOrUnarmed(weaponId) {
   return getWeaponCategory(weaponId) ?? "unarmed";
@@ -851,6 +873,7 @@ export {
   getDefaultAttackStyleIndex,
   getActiveSpell,
   getWeaponCategory,
+  hasListedWeaponCategory,
   getWeaponCategoryOrUnarmed,
   getWeaponCategoryDefinition,
 };

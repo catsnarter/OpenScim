@@ -1,5 +1,6 @@
 import { getBaseItemId } from "../data/itemVariants.js";
 import { getEquipmentDefinition } from "../data/equipment.js";
+import { getWeaponCategory, hasListedWeaponCategory } from "../data/weaponCategories.js";
 var variantArrowsByItemId = {
   33553: { // Seeking bronze arrow
     baseArrowId: 882,
@@ -48,7 +49,8 @@ function isDragonArrow(ammoId) {
   return baseArrowId === DRAGON_ARROW_ID || /^dragon /i.test(getEquipmentDefinition(baseArrowId)?.name ?? "");
 }
 var standardBoltWeaponIds = new Set([9185]);
-var dragonBoltWeaponIds = new Set([11785, 26374]);
+// Crossbows that also fire dragon bolts (WIKI: Dragon bolts): the Armadyl, Zaryte, dragon and dragon hunter crossbows.
+var dragonBoltWeaponIds = new Set([11785, 26374, 21902, 21012, 25916, 25918]);
 var arrowNamePattern =
   /^(?:bronze|iron|steel|mithril|adamant|rune|broad|amethyst|dragon)(?: fire)? arrows?/i;
 var standardBoltNamePattern =
@@ -79,13 +81,38 @@ function isArrowOrBolt(ammoId) {
   const ammoKind = getAmmoKind(ammoId);
   return ammoKind === "arrow" || ammoKind === "standard_bolt" || ammoKind === "dragon_bolt";
 }
+// A bow or crossbow whose category comes from the equipment list
+// (weaponCategories.js, getWeaponCategory) and not from the sets above takes
+// the ammunition of its category: a bow arrows, a crossbow standard bolts
+// (WIKI: Bow, Crossbow). Those that fire no such ammunition are left without
+// any, as before: the bows that use charges (the crystal bows, Craw's,
+// Webweaver, Venator), ogre bows (ogre arrows), the crossbows of bolt racks,
+// antler bolts and bone bolts (Karil's, the hunters', Dorgeshuun) and the
+// ballistae, which the list calls crossbows but which throw javelins.
+var ammoOfItsOwnPattern = /crystal|faerdhinen|craw's bow|webweaver|venator|ogre|karil|hunters'|dorgeshuun|ballista/i;
+function getCategoryAmmoKind(baseWeaponId) {
+  if (hasListedWeaponCategory(baseWeaponId)) {
+    return null;
+  }
+  const category = getWeaponCategory(baseWeaponId);
+  if ((category !== "bow" && category !== "crossbow") || ammoOfItsOwnPattern.test(getEquipmentDefinition(baseWeaponId)?.name ?? "")) {
+    return null;
+  }
+  return category === "bow" ? "arrow" : "standard_bolt";
+}
 function weaponRequiresAmmo(weaponId) {
   const baseWeaponId = weaponId === undefined ? undefined : getBaseItemId(weaponId);
-  return baseWeaponId !== undefined && (atlatlWeaponIds.has(baseWeaponId) || arrowWeaponIds.has(baseWeaponId) || standardBoltWeaponIds.has(baseWeaponId) || dragonBoltWeaponIds.has(baseWeaponId));
+  return baseWeaponId !== undefined && (atlatlWeaponIds.has(baseWeaponId) || arrowWeaponIds.has(baseWeaponId) || standardBoltWeaponIds.has(baseWeaponId) || dragonBoltWeaponIds.has(baseWeaponId) || getCategoryAmmoKind(baseWeaponId) !== null);
 }
 function isAmmoCompatibleWithWeapon(weaponId, ammoId) {
   const baseWeaponId = getBaseItemId(weaponId);
   const ammoKind = getAmmoKind(ammoId);
+  if (!atlatlWeaponIds.has(baseWeaponId) && !arrowWeaponIds.has(baseWeaponId) && !standardBoltWeaponIds.has(baseWeaponId) && !dragonBoltWeaponIds.has(baseWeaponId)) {
+    const categoryAmmoKind = getCategoryAmmoKind(baseWeaponId);
+    if (categoryAmmoKind !== null) {
+      return ammoKind === categoryAmmoKind;
+    }
+  }
   if (atlatlWeaponIds.has(baseWeaponId)) {
     return ammoKind === "atlatl_dart";
   } else if (arrowWeaponIds.has(baseWeaponId)) {
