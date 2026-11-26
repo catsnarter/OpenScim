@@ -35,13 +35,13 @@ try {
   await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 60000 });
   assert.equal(new URL(page.url()).pathname, "/scurrius/");
 
-  // The player starts in the first of his setups (loadouts.js, the wiki's strategies page): the abyssal whip and
-  // dragon defender worn, a full inventory of supplies.
+  // The player starts in the first of his setups (loadouts.js, the wiki's strategies page), Melee (mid level): the
+  // rat bone mace and dragon defender worn, Rada's blessing 3, a full inventory of supplies.
   const setup = await page.evaluate(() => {
-    const { equipment, inventory } = engine.player();
-    return { weapon: equipment.weapon, shield: equipment.shield, items: inventory.filter(Boolean).length };
+    const { equipment, inventory, combatSupplies } = engine.player();
+    return { weapon: equipment.weapon, shield: equipment.shield, ammo: combatSupplies.equippedAmmo?.id, items: inventory.filter(Boolean).length };
   });
-  assert.deepEqual(setup, { weapon: 4151, shield: 12954, items: 28 });
+  assert.deepEqual(setup, { weapon: 28792, shield: 12954, ammo: 22945, items: 28 });
 
   // At 79% he runs to a food pile, eats there and, before long, calls his rats. The page's fight is seeded at
   // random, and an eating turn is a call 1 time in 11 (encounter.js): 300 ticks (some 24 turns) went without one

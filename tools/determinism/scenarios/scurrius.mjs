@@ -90,16 +90,16 @@ export const scenarios = [
     },
   },
   {
-    // His own loadout with the rat bone shortbow: +10 to the max hit against
-    // him and his rats, and no attack cooldown on the rats, so a wave goes down
-    // a rat a tick. Rats first, praying and dodging as above.
+    // His own mid level ranged setup, the rat bone shortbow: +10 to the max hit
+    // against him and his rats, and no attack cooldown on the rats, so a wave
+    // goes down a rat a tick. Rats first, praying and dodging as above.
     name: "scurrius/bone-shortbow-kill",
     kind: KIND,
     seed: 4,
     ticks: 500,
     mechanics: { infiniteHealth: true, infinitePrayer: true },
-    equipment: scurriusLoadouts.bone_shortbow.equipment,
-    supplies: scurriusLoadouts.bone_shortbow.supplies,
+    equipment: scurriusLoadouts.mid_ranged.equipment,
+    supplies: scurriusLoadouts.mid_ranged.supplies,
     script(tick, api) {
       pray(api);
       if (dodge(api)) return;
@@ -108,13 +108,14 @@ export const scenarios = [
     },
   },
   {
-    // The rat bone mace in the middle at 29%: his rats, then him, from beside his body.
+    // His own mid level melee setup, the rat bone mace, in the middle at 29%: his rats, then him, from beside his body.
     name: "scurrius/bone-mace-middle",
     kind: KIND,
     seed: 15,
     ticks: 160,
     mechanics: { infiniteHealth: true, infinitePrayer: true },
-    equipment: scurriusLoadouts.bone_mace.equipment,
+    equipment: scurriusLoadouts.mid_melee.equipment,
+    supplies: scurriusLoadouts.mid_melee.supplies,
     script(tick, api) {
       if (tick === 1) setBossHp(api, 145);
       pray(api);

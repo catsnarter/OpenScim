@@ -104,8 +104,8 @@ test("against anything but a rat: no attack, and the game's words", { skip }, as
       seed: 3,
       ticks: 30, // the attack is refused within reach, as an ammunition refusal is: the bow's reach, not a melee walk
       mechanics: { infiniteHealth: true, infinitePrayer: true },
-      equipment: scurriusLoadouts.bone_shortbow.equipment,
-      supplies: scurriusLoadouts.bone_shortbow.supplies,
+      equipment: scurriusLoadouts.mid_ranged.equipment,
+      supplies: scurriusLoadouts.mid_ranged.supplies,
       script(tick, api) {
         if (tick === 1) protect(api, "ProtectMagic");
         if (tick === 2) attack(api, "leviathan");
