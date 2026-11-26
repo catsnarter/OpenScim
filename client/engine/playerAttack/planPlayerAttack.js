@@ -38,7 +38,7 @@ function planPlayerAttack(attackInput, consumeGuaranteedMaximum, forceGuaranteed
     soulreaperStacks: getSoulreaperStackCount(attackInput.player.soulreaper),
     combatStyle: getSelectedCombatStyle(attackInput.player),
     targetDistance: attackInput.targetDistance,
-    // The Ranged strength of the ammunition alone, for a hit that takes no other (Seercull's Soulshot).
+    // The Ranged strength of the ammunition alone, for a hit that takes no other (Seercull's Soulshot, the magic shortbow's Snapshot).
     ...(attackInput.resources?.kind === "ammo"
       ? { ammoRangedStrength: attackInput.lookupItemStats?.(attackInput.resources.ammoId)?.rangedStrength }
       : {}),

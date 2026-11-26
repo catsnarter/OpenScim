@@ -868,6 +868,27 @@ export const scenarios = [
     },
   },
   {
+    // Two-arrow bows (WIKI: Dark bow, Magic shortbow (i)). The dark bow fires two arrows on every attack; its Descent of
+    // Dragons with dragon arrows is two arrows of at least 8 each, even on a miss, at most 48. The magic shortbow (i)'s
+    // Snapshot is two arrows with a max hit of its own formula, from the Ranged level and the arrow's strength alone.
+    name: "engine/two-arrow-bows",
+    kind: "yama_p3",
+    seed: 52,
+    ticks: 90,
+    mechanics: { ...dummy, infiniteSpecialAttack: true },
+    ...rangedGear,
+    equipment: { ...rangedGear.equipment, weapon: undefined },
+    supplies: { equippedAmmo: { id: 11212 /* Dragon arrow */ } },
+    inventory: [11235 /* Dark bow */, 12788 /* Magic shortbow (i) */, 21326 /* Amethyst arrow */],
+    script(tick, api) {
+      if (tick === 1) (offensive(api, "Rigour"), equip(api, 0, "weapon"), attack(api, boss(api).id));
+      if (tick === 60) (equip(api, 1, "weapon"), equip(api, 2, "ammo"), attack(api, boss(api).id));
+      // Specials from the dark bow until tick 45, plain dark bow shots until 60, then Snapshots.
+      const wantSpecial = tick < 45 || tick >= 60;
+      if (api.player().isSpecialAttackActive !== wantSpecial) special(api);
+    },
+  },
+  {
     // An accurate hit that does no damage. In the Glyphic Attenuation contract damage is multiplied by 1 + 0.0155 per
     // point of prayer bonus; the Ruinous powers book has -1, and a hit of 1 (all a player of 1 Strength rolls, half
     // the time) is floored to 0. The warhammer's Defence drain needs damage, so the engine sorts the special's effects

@@ -128,9 +128,10 @@ function buildPlannedHitsForProfile(profile, attackContext) {
           ? profile.accuracy
           : { ...profile.accuracy, attackRollStages: [...(profile.accuracy.attackRollStages ?? []), ...extraStages] };
       };
+      const floor = profile.minimumOnMiss === undefined ? undefined : { minimum: profile.minimumOnMiss, cap: profile.damageCap };
       return [
-        buildMaxHitFractionHit(firstMaximumFraction, hitAccuracy(0), attackContext),
-        ...otherMaximumFractions.map((maximumFraction, index) => buildMaxHitFractionHit(maximumFraction, hitAccuracy(index + 1), attackContext)),
+        buildMaxHitFractionHit(firstMaximumFraction, hitAccuracy(0), attackContext, floor),
+        ...otherMaximumFractions.map((maximumFraction, index) => buildMaxHitFractionHit(maximumFraction, hitAccuracy(index + 1), attackContext, floor)),
       ];
     }
     case "secondHitIfFirstAccurate":
@@ -276,19 +277,43 @@ function resolveBoltProcSpec(procSpec, maxHit) {
       return procSpec;
   }
 }
-function buildMaxHitFractionHit(maximumFraction, accuracySpec, attackContext) {
+function buildMaxHitFractionHit(maximumFraction, accuracySpec, attackContext, floor) {
+  const accuracy = resolveAccuracySpec(accuracySpec, attackContext.accuracyRolls, attackContext.standardAccuracyMode);
+  const maximumInclusive = floorMultiplyByRatio(attackContext.maxHit, maximumFraction);
+  if (floor !== undefined) {
+    return {
+      ...attackContext.delivery,
+      gate: { kind: "always" },
+      accuracy: { kind: "guaranteed" },
+      damage: buildFloorOnMissDamage(accuracy, maximumInclusive, floor),
+    };
+  }
   return {
     ...attackContext.delivery,
     gate: {
       kind: "always",
     },
-    accuracy: resolveAccuracySpec(accuracySpec, attackContext.accuracyRolls, attackContext.standardAccuracyMode),
+    accuracy: accuracy,
     damage: {
       kind: "uniform",
       minimumInclusive: 0,
-      maximumInclusive: floorMultiplyByRatio(attackContext.maxHit, maximumFraction),
+      maximumInclusive: maximumInclusive,
     },
   };
+}
+// A hit that deals `floor.minimum` even when its accuracy roll fails, and on
+// an accurate roll at least the minimum and at most `floor.cap` (the dark
+// bow's special, WIKI: Dark bow). As weighted outcomes, so the hit is always
+// "accurate" to the rest of the engine: the miss is folded into the damage.
+function buildFloorOnMissDamage(accuracy, maximumInclusive, floor) {
+  const chance = accuracy.kind === "roll" ? accuracy.chance : 1;
+  const outcomes = [];
+  if (chance < 1) outcomes.push({ damage: floor.minimum, weight: 1 - chance });
+  for (let rolled = 0; rolled <= maximumInclusive; rolled += 1) {
+    const damage = Math.min(floor.cap ?? Infinity, Math.max(floor.minimum, rolled));
+    outcomes.push({ damage, weight: chance / (maximumInclusive + 1) });
+  }
+  return { kind: "weighted", outcomes };
 }
 function buildPriorDamageFollowUpHit(followUp, attackContext) {
   return {

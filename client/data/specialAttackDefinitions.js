@@ -507,22 +507,30 @@ var specialAttackDefinitionByWeaponId = {
     defenceStyle: "melee_crush",
     animationId: 7511,
   },
+  // Dark bow and its painted versions, Descent of Darkness / Dragons: 55% (WIKI: Dark bow)
   11235: {
+    energyCost: 55,
     animationId: 426,
   },
   12765: {
+    energyCost: 55,
     animationId: 426,
   },
   12766: {
+    energyCost: 55,
     animationId: 426,
   },
   12767: {
+    energyCost: 55,
     animationId: 426,
   },
   12768: {
+    energyCost: 55,
     animationId: 426,
   },
+  // Magic shortbow, Snapshot: 55%; the (i), 50% (WIKI: Magic shortbow, Magic shortbow (i))
   861: {
+    energyCost: 55,
     animationId: 426,
   },
   // Seercull, Soulshot. WIKI: "consumes 100% of the player's special attack
@@ -544,6 +552,7 @@ var specialAttackDefinitionByWeaponId = {
     ],
   },
   12788: {
+    energyCost: 50,
     animationId: 426,
   },
   // Light and heavy ballista, Concentrated Shot: 65% (WIKI: Heavy ballista)
@@ -577,33 +586,8 @@ var specialAttackDefinitionByWeaponId = {
     animationId: 10173,
     graphicId: 2430,
   },
-  23995: {
-    animationId: 390,
-  },
-  24551: {
-    animationId: 390,
-  },
-  25870: {
-    animationId: 390,
-  },
-  25872: {
-    animationId: 390,
-  },
-  25874: {
-    animationId: 390,
-  },
-  25876: {
-    animationId: 390,
-  },
-  25878: {
-    animationId: 390,
-  },
-  25880: {
-    animationId: 390,
-  },
-  25882: {
-    animationId: 390,
-  },
+  // No entry for the Blade of Saeldor (23995) or its (c) versions: it has no special attack (WIKI: Blade of
+  // Saeldor; one was polled and did not pass). An entry gave it a special button that did nothing.
   22613: {
     defenceStyle: "melee_stab",
     animationId: 7515,

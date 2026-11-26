@@ -1,5 +1,6 @@
 import { getCanonicalEquipmentId, getEquipmentDefinition } from "../../data/equipment.js";
 import { getBaseItemId } from "../../data/itemVariants.js";
+import { variantArrowsByItemId } from "../ammunition.js";
 import { hasSpecialAttack, getSpecialAttackDefinition } from "../../data/specialAttackDefinitions.js";
 import {
   ECLIPSE_SPECIAL_FORMULA_GAP,
@@ -694,6 +695,12 @@ function selectBaseProfile(canonicalInput) {
     if (canonicalInput.weaponId === SEERCULL_ID) {
       return buildSeercullSoulshotProfile(canonicalInput);
     }
+    if (darkBowIdSet.has(canonicalInput.weaponId)) {
+      return buildDescentProfile(canonicalInput);
+    }
+    if (magicShortbowIdSet.has(canonicalInput.weaponId)) {
+      return buildSnapshotProfile(canonicalInput);
+    }
     if (halberdSweepIdSet.has(canonicalInput.weaponId)) {
       return buildHalberdSweepProfile(canonicalInput);
     }
@@ -745,6 +752,8 @@ function selectBaseProfile(canonicalInput) {
     } else {
       return defaultSingleHitProfile;
     }
+  } else if (darkBowIdSet.has(canonicalInput.weaponId)) {
+    return buildDarkBowProfile(canonicalInput);
   } else {
     return buildStandardSingleHitProfile(canonicalInput);
   }
@@ -1272,6 +1281,62 @@ function buildConcentratedShotProfile(profileInput) {
       accuracy: standardAccuracyFromStages([...formulaStages.attackRollStages, RATIO_5_OVER_4]),
       damage: { kind: "uniformToMaxHit" },
     },
+  };
+}
+// The dark bow (WIKI: Dark bow): every attack "fires two arrows per attack,
+// which roll independent accuracy checks", each to the full max hit. Whether
+// the second hitsplat lands a tick later is not stated; both land together here.
+var darkBowIdSet = new Set([11235, 12765, 12766, 12767, 12768]); // Dark bow and its four painted versions
+function buildDarkBowProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  return {
+    kind: "independentMultiHit",
+    maxHit: maxHitSpecFromStages(formulaStages.maxHitStages),
+    accuracy: standardAccuracyFromStages(formulaStages.attackRollStages),
+    maximumFractions: [RATIO_ONE, RATIO_ONE],
+  };
+}
+// Descent of Darkness and Descent of Dragons, the dark bow's special (WIKI:
+// Dark bow): two arrows; with dragon arrows (seeking dragon arrows too) "up
+// to 50% more damage with a minimum of 8 damage per arrow, while capping the
+// max hit at 48 damage per arrow", otherwise "up to 30% more damage with a
+// minimum of 5 damage per arrow". The minimum is dealt on a failed accuracy
+// roll too: the specials "have to pass regular accuracy check to be able to
+// deal more damage than their minimum guaranteed hit".
+var DESCENT_OF_DRAGONS_RATIO = RATIO_3_OVER_2;
+var DESCENT_OF_DARKNESS_RATIO = { numerator: 13, denominator: 10 };
+function isDragonArrow(ammoId) {
+  const baseArrowId = variantArrowsByItemId[ammoId]?.baseArrowId ?? ammoId;
+  return /^dragon (?:fire )?arrows?/i.test(getEquipmentDefinition(baseArrowId)?.name ?? "");
+}
+function buildDescentProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  const dragons = "ammo" === profileInput.resources?.kind && isDragonArrow(profileInput.resources.ammoId);
+  return {
+    kind: "independentMultiHit",
+    maxHit: { kind: "staged", stages: [...formulaStages.maxHitStages, dragons ? DESCENT_OF_DRAGONS_RATIO : DESCENT_OF_DARKNESS_RATIO] },
+    accuracy: standardAccuracyFromStages(formulaStages.attackRollStages),
+    maximumFractions: [RATIO_ONE, RATIO_ONE],
+    minimumOnMiss: dragons ? 8 : 5,
+    ...(dragons ? { damageCap: 48 } : {}),
+  };
+}
+// Snapshot, the magic shortbow's special (WIKI: Magic shortbow (i)): two
+// arrows "in rapid succession", with the max hit the Seercull's Soulshot has:
+// floor(0.5 + (visible Ranged level + 10) * (ammo ranged strength + 64) / 640),
+// in which only the arrow's ranged strength counts and prayers, Void and the
+// Slayer helmet or salve do not. Accuracy: the wiki's "accuracy boost of 107
+// or about 43%", here 10/7 of the attack roll (inferred from that). The two
+// hits roll separately and land together here (the wiki does not say).
+var magicShortbowIdSet = new Set([861, 12788]); // Magic shortbow, Magic shortbow (i)
+var SNAPSHOT_ACCURACY_RATIO = { numerator: 10, denominator: 7 };
+function buildSnapshotProfile(profileInput) {
+  const formulaStages = computeFormulaStages(toFormulaStageInput(profileInput));
+  return {
+    kind: "independentMultiHit",
+    maxHit: { kind: "fixed", maxHit: getSeercullSoulshotMaxHit(profileInput.playerRangedLevel ?? 1, profileInput.ammoRangedStrength ?? 0) },
+    accuracy: standardAccuracyFromStages([...formulaStages.attackRollStages, SNAPSHOT_ACCURACY_RATIO]),
+    maximumFractions: [RATIO_ONE, RATIO_ONE],
   };
 }
 function maxHitSpecFromStages(maxHitStages) {
