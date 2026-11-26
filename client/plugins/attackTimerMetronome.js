@@ -34,11 +34,11 @@ const choices = (...pairs) => pairs.map(([value, label]) => ({ value, label }));
  * Before Attack" and "Fills Before Attack", kept at their defaults (both on).
  */
 export const attackTimerMetronomeOptions = [
-  { key: "showTick", label: "Show tick number", section: "General", type: "boolean", default: true, info: "Shows the ticks until your next attack over your head" },
-  { key: "showBar", label: "Show attack bar", section: "General", type: "boolean", default: false, info: "Shows a bar over your head that runs down to your next attack" },
-  { key: "useZeroBasedTickCount", label: "Count down to 0", section: "Tick Number", type: "boolean", default: false, info: "Counts down to 0 instead of 1" },
-  { key: "showLostTicks", label: "Show late ticks", section: "Tick Number", type: "boolean", default: true, info: "Shows -1, -2 when an attack is late" },
-  { key: "maximumLostTicks", label: "Late ticks shown", section: "Tick Number", type: "number", min: 1, max: 20, default: 2, info: "How far past an attack the count keeps going" },
+  { key: "showTick", label: "Show tick number", section: "General", type: "boolean", default: true, info: "Shows the ticks until your next attack over your head", keywords: ["overhead timer", "overhead number", "attack cycle", "above head", "cooldown ticks"] },
+  { key: "showBar", label: "Show attack bar", section: "General", type: "boolean", default: false, info: "Shows a bar over your head that runs down to your next attack", keywords: ["cooldown bar", "attack timer bar", "attack bar"] },
+  { key: "useZeroBasedTickCount", label: "Count down to 0", section: "Tick Number", type: "boolean", default: false, info: "Counts down to 0 instead of 1", keywords: ["zero based", "count to zero", "0 based"] },
+  { key: "showLostTicks", label: "Show late ticks", section: "Tick Number", type: "boolean", default: true, info: "Shows -1, -2 when an attack is late", keywords: ["lost ticks", "late attack", "negative ticks"] },
+  { key: "maximumLostTicks", label: "Late ticks shown", section: "Tick Number", type: "number", min: 1, max: 20, default: 2, info: "How far past an attack the count keeps going", keywords: ["lost ticks", "late attack", "negative ticks"] },
   {
     key: "ticksPosition",
     label: "Position",
@@ -46,10 +46,10 @@ export const attackTimerMetronomeOptions = [
     type: "select",
     choices: choices(["DEFAULT", "Above head"], ["TOP", "Top"], ["CENTERED", "Centre of player"], ["BOTTOM", "At feet"]),
     default: "DEFAULT",
-    info: "Where the tick number is drawn",
+    info: "Where the tick number is drawn", keywords: ["placement", "above head", "feet", "overhead number"],
   },
-  { key: "tickHeightOffset", label: "Y offset", section: "Tick Number", type: "number", min: -50, max: 50, default: 0, info: "Moves the number up (positive) or down (negative)" },
-  { key: "fontSize", label: "Font size", section: "Tick Number", type: "number", min: 8, max: 50, default: 15, info: "The size of the tick number" },
+  { key: "tickHeightOffset", label: "Y offset", section: "Tick Number", type: "number", min: -50, max: 50, default: 0, info: "Moves the number up (positive) or down (negative)", keywords: ["offset", "height", "move up", "move down"] },
+  { key: "fontSize", label: "Font size", section: "Tick Number", type: "number", min: 8, max: 50, default: 15, info: "The size of the tick number", keywords: ["font size", "text size", "number size"] },
   {
     key: "fontType",
     label: "Font",
@@ -57,7 +57,7 @@ export const attackTimerMetronomeOptions = [
     type: "select",
     choices: choices(["REGULAR", "RuneScape"], ["BOLD", "RuneScape bold"], ["ARIAL", "Arial"], ["VERDANA", "Verdana"]),
     default: "REGULAR",
-    info: "The font of the tick number",
+    info: "The font of the tick number", keywords: ["font", "typeface", "bold"],
   },
   {
     key: "barStyle",
@@ -66,15 +66,15 @@ export const attackTimerMetronomeOptions = [
     type: "select",
     choices: choices(["AUTO", "Match Interface Styles"], ["STANDARD", "Standard"], ["HIGH_DETAIL", "High detail"]),
     default: "AUTO",
-    info: "The bar's look; by default the same as your health bar's",
+    info: "The bar's look; by default the same as your health bar's", keywords: ["hd bar", "high detail", "health bar style"],
   },
-  { key: "barDrains", label: "Drain instead of fill", section: "Attack Bar", type: "boolean", default: true, info: "Starts full and empties, rather than starting empty and filling" },
+  { key: "barDrains", label: "Drain instead of fill", section: "Attack Bar", type: "boolean", default: true, info: "Starts full and empties, rather than starting empty and filling", keywords: ["fill", "empty", "drain", "bar direction"] },
   // PLUGIN: "Height Offset", as the number's.
-  { key: "barHeightOffset", label: "Bar Y offset", section: "Attack Bar", type: "number", min: -100, max: 100, default: 0, info: "Moves the bar up (positive) or down (negative)" },
+  { key: "barHeightOffset", label: "Bar Y offset", section: "Attack Bar", type: "number", min: -100, max: 100, default: 0, info: "Moves the bar up (positive) or down (negative)", keywords: ["offset", "bar height", "move up", "move down"] },
   // PLUGIN: java.awt.Color.CYAN for the first two, RED for the last.
-  { key: "numberColor", label: "Number colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number" },
-  { key: "lastColor", label: "Last tick colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number on the last tick before an attack" },
-  { key: "lostTickColor", label: "Late tick colour", section: "Colours", type: "color", default: "FFFF0000", info: "The colour of -1, -2 when an attack is late" },
+  { key: "numberColor", label: "Number colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number", keywords: ["colour", "color", "text colour"] },
+  { key: "lastColor", label: "Last tick colour", section: "Colours", type: "color", default: "FF00FFFF", info: "The colour of the tick number on the last tick before an attack", keywords: ["colour", "color", "last tick"] },
+  { key: "lostTickColor", label: "Late tick colour", section: "Colours", type: "color", default: "FFFF0000", info: "The colour of -1, -2 when an attack is late", keywords: ["colour", "color", "late tick", "red"] },
 ];
 export const attackTimerMetronomeStore = createPluginStore("attackTimerMetronome", attackTimerMetronomeOptions);
 
@@ -83,9 +83,12 @@ export const attackTimerMetronomeStore = createPluginStore("attackTimerMetronome
 // Attack Cooldown Ticks" and a font size, with an offset and "above prayer
 // icon" that RuneLite's plugin has no match for. Once, before the application
 // next saves its settings without them (this module is loaded first), they are
-// carried into the store: all of them for a player who had it on, so that it
-// looks as it did; for one who had it off, only what was changed from what
-// they were by default then, so that it is RuneLite's when first switched on.
+// carried into the store: for a player who had it on, the bar, the number and
+// its size, and no late ticks (the old metronome drew none), so that it looks
+// as it did, but for the offsets and "above prayer icon" (no match) and the
+// bar's place (RuneLite's); for one who had it off, only what was changed from
+// what they were by default then, so that it is RuneLite's when first switched
+// on.
 const legacyKey = "osrs-yama-settings";
 const legacyDefaults = { attackTimerMetronomeShowBar: true, attackTimerMetronomeShowTicks: false, attackTimerMetronomeFontSize: 24 };
 export function carryOverLegacySettings(store = attackTimerMetronomeStore, storage = globalThis.localStorage) {
@@ -100,6 +103,8 @@ export function carryOverLegacySettings(store = attackTimerMetronomeStore, stora
     if (chosen("attackTimerMetronomeShowTicks", (v) => typeof v === "boolean")) settings.showTick = app.attackTimerMetronomeShowTicks;
     // Its old size could be 8 to 72; RuneLite's is 8 to 50.
     if (chosen("attackTimerMetronomeFontSize", Number.isFinite)) settings.fontSize = Math.max(8, Math.min(50, Math.round(app.attackTimerMetronomeFontSize)));
+    // The old metronome drew no late ticks: none for a player who had it on, whatever the number.
+    if (on) settings.showLostTicks = false;
     const changed = Object.keys(settings).some((key) => settings[key] !== store.defaults[key]);
     if (!on && !changed) return false; // nothing of the player's to keep
     store.setSettings(settings);

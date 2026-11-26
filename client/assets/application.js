@@ -21731,11 +21731,15 @@ var Yme = [
         "tick timer",
         "attack counter",
         "lost ticks",
+        "late ticks",
+        "cooldown bar",
+        "overhead number",
         "font size",
       ],
     }),
+    // Each option's own search words, kept with it (client/plugins/attackTimerMetronome.js).
     ...attackTimerMetronomeStore.options.map((option) =>
-      _me("attackTimerMetronome", "Attack Timer Metronome", option.label, { description: option.info, keywords: [] }),
+      _me("attackTimerMetronome", "Attack Timer Metronome", option.label, { description: option.info, keywords: option.keywords ?? [] }),
     ),
     plugin("bossHealthBar", "Boss Health Bar", {
       description: "A movable OSRS-style boss health bar.",

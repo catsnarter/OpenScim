@@ -43782,9 +43782,11 @@ var UIOverlayRenderer = class e {
         Number(e.placement.abovePrayerIcon) -
         Number(a.placement.abovePrayerIcon),
     );
-    // Above Attack Timer Metronome's number (LL, drawn first) where the two would meet.
+    // Above Attack Timer Metronome's number (LL, drawn first) where the two would meet: not where an X offset puts
+    // this one beside it. inferred: a character as wide as 0.6 of its font size (the numbers' widths are not measured).
     const metronomeNumber = a.tickCounters.find((counter) => counter.key === "player-attack-timer-number");
-    let f = metronomeNumber ? metronomeNumber.screenY - metronomeNumber.fontSize / 2 : Number.POSITIVE_INFINITY;
+    const halfWidth = (text, size) => String(text).length * size * 0.3;
+    let f = Number.POSITIVE_INFINITY;
     for (const { placement: placement, ...t } of l) {
       const {
         fontSize: fontSize,
@@ -43795,7 +43797,11 @@ var UIOverlayRenderer = class e {
       const l = abovePrayerIcon
         ? g.y - m - fontSize / 2 - OVERHEAD_NUMBER_GAP2
         : c;
-      const o = Math.min(l, f - OVERHEAD_NUMBER_GAP2 - fontSize / 2);
+      const meetsMetronome =
+        metronomeNumber !== undefined &&
+        Math.abs(g.x + offsetX - metronomeNumber.screenX) < halfWidth(t.text, fontSize) + halfWidth(metronomeNumber.text, metronomeNumber.fontSize);
+      const below = meetsMetronome ? Math.min(f, metronomeNumber.screenY - metronomeNumber.fontSize / 2) : f;
+      const o = Math.min(l, below - OVERHEAD_NUMBER_GAP2 - fontSize / 2);
       f = o - fontSize / 2;
       a.tickCounters.push({
         ...t,

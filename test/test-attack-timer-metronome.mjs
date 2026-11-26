@@ -20,14 +20,26 @@ function carryOver(app, own = null) {
 }
 const old = { attackTimerMetronomeShowBar: true, attackTimerMetronomeShowTicks: false, attackTimerMetronomeFontSize: 24 };
 {
-  // It was on: as it looked, the old defaults included (bar on, number off, 24).
+  // It was on: as it looked, the old defaults included (bar on, number off, 24), and no late ticks: it drew none.
   const { carried, enabled, settings } = carryOver({ ...old, attackTimerMetronomeEnabled: true });
-  assert.deepEqual({ carried, enabled, showBar: settings.showBar, showTick: settings.showTick, fontSize: settings.fontSize }, { carried: true, enabled: true, showBar: true, showTick: false, fontSize: 24 });
+  assert.deepEqual(
+    { carried, enabled, showBar: settings.showBar, showTick: settings.showTick, fontSize: settings.fontSize, showLostTicks: settings.showLostTicks },
+    { carried: true, enabled: true, showBar: true, showTick: false, fontSize: 24, showLostTicks: false },
+  );
 }
 {
-  // It was off, with the number switched on and a size of 60: those, the size within RuneLite's 50; the rest RuneLite's.
+  // It was on with the number shown: no late ticks either.
+  const { settings } = carryOver({ ...old, attackTimerMetronomeEnabled: true, attackTimerMetronomeShowTicks: true });
+  assert.deepEqual({ showTick: settings.showTick, showLostTicks: settings.showLostTicks }, { showTick: true, showLostTicks: false });
+}
+{
+  // It was off, with the number switched on and a size of 60: those, the size within RuneLite's 50; the rest RuneLite's,
+  // late ticks included (it is RuneLite's when first switched on).
   const { carried, enabled, settings } = carryOver({ ...old, attackTimerMetronomeEnabled: false, attackTimerMetronomeShowTicks: true, attackTimerMetronomeFontSize: 60 });
-  assert.deepEqual({ carried, enabled, showBar: settings.showBar, showTick: settings.showTick, fontSize: settings.fontSize }, { carried: true, enabled: false, showBar: false, showTick: true, fontSize: 50 });
+  assert.deepEqual(
+    { carried, enabled, showBar: settings.showBar, showTick: settings.showTick, fontSize: settings.fontSize, showLostTicks: settings.showLostTicks },
+    { carried: true, enabled: false, showBar: false, showTick: true, fontSize: 50, showLostTicks: true },
+  );
 }
 // It was off and never changed, or the store has its own already: nothing is carried.
 assert.equal(carryOver({ ...old, attackTimerMetronomeEnabled: false }).carried, false);
