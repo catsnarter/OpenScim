@@ -14,6 +14,14 @@ const boss = (api) => api.npcs().find((npc) => npc.id === BOSS);
 const directions = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
 const leftOf = ([fx, fy]) => [-fy, fx];
 
+// Protect from Magic switched on on each tick a smite strikes (its perfect prayer), Protect from Melee the rest of the
+// time.
+function prayFor(api, tick) {
+  const strikes = state(api).special?.strikes ?? [];
+  const want = strikes.includes(tick) ? "ProtectMagic" : "ProtectMelee";
+  if (api.player().activePrayer !== want) protect(api, want);
+}
+
 // On the ball's tile to bounce it; out of the half a cleave will sweep, to the corner of her opposite it. Returns true
 // when the player is busy with one of them.
 function counter(api) {
@@ -49,8 +57,8 @@ const graniteHammer = {
 
 export const scenarios = [
   {
-    // Her mechanics countered: every ball bounced back to her, every cleave stepped out of; Protect from Melee, the
-    // Obligator. Infinite health: to her death.
+    // Her mechanics countered: every ball bounced back to her, every cleave stepped out of, every smite met with Protect
+    // from Magic on its tick; Protect from Melee otherwise, the Obligator. Infinite health: to her death.
     name: "mad-angel/countered",
     kind: KIND,
     seed: 5,
@@ -58,7 +66,7 @@ export const scenarios = [
     mechanics: { infiniteHealth: true, infinitePrayer: true },
     ...obligator,
     script(tick, api) {
-      if (tick === 1) protect(api, "ProtectMelee");
+      prayFor(api, tick);
       if (counter(api)) return;
       if (api.player().attackTarget !== BOSS) attack(api, BOSS);
     },
@@ -86,6 +94,19 @@ export const scenarios = [
     mechanics: { infiniteHealth: true },
     ...graniteHammer,
     script(tick, api) {
+      if (api.player().attackTarget !== BOSS) attack(api, BOSS);
+    },
+  },
+  {
+    // Protect from Magic held from the start: her smite is cut by ~75%, never negated, and earns nothing.
+    name: "mad-angel/magic-prayer",
+    kind: KIND,
+    seed: 8,
+    ticks: 130,
+    mechanics: { infiniteHealth: true, infinitePrayer: true },
+    ...graniteHammer,
+    script(tick, api) {
+      if (tick === 1) protect(api, "ProtectMagic");
       if (api.player().attackTarget !== BOSS) attack(api, BOSS);
     },
   },

@@ -13,9 +13,9 @@
 // At 350 hitpoints she enrages ("...!"): her specials come quicker, and from
 // then on one after another, the three of them first.
 //
-// The blast and the sweep are whole. Not yet: the smite's damage and its
-// perfect prayer, and the accurate and maximum hits a dodge and a perfect
-// prayer earn: the smite plays and takes its time, and hits nothing.
+// The blast, the sweep and the smite are whole, the smite's perfect prayer
+// earning a maximum hit. Not yet: the accurate hit a dodge of the sweep to
+// her side earns.
 //
 // Sources: WIKI Mad Angel and Mad Angel/Strategies; TABLE her stats
 // (client/data/monsters.js, 16305); CACHE her ids (ids.js); OBS one kill
@@ -82,7 +82,13 @@ const leftOf = ([fx, fy]) => [-fy, fx];
 // The engine's angle of each (computeFacingFromDelta, client/engine/SimulationEngine.js). OBS: through a sweep she
 // holds one of these, turning only right after a cleave (t72 south, t73 north, held till the cleave at t78).
 const facingAngles = { S: 0, W: 512, N: 1024, E: 1536 };
-const smite = { strikeTicks: 5, strikesEnraged: [5, 9, 11] }; // OBS: the impact on the player 5 ticks in; enraged 4 then 2 ticks apart
+const smite = {
+  strikeTicks: 5, // OBS: the impact graphic on the player 5 ticks after her smite (t114 -> t119)
+  strikesEnraged: [5, 9, 11], // OBS: t190 -> t195, t199, t201; WIKI: "4 ticks after the first, ... 2 ticks after the second"
+  hitAfterTicks: 1, // OBS: each hitsplat the tick after its impact (t119 -> t120)
+  damage: [28, 32], // inferred: OBS 29 to 32 unprayed; WIKI her max hit 32
+  prayedShare: 0.25, // WIKI: "Simply having the prayer overhead will reduce the damage by ~75%"
+};
 // Her next turn, from the tick a special ends: a sweep ends the tick after its last cleave, a smite on its last hit.
 // OBS: the last cleave t90 -> t96, the smite's hit t120 -> t126; inferred the blast (t158 -> t160, t223 -> t226).
 const nextTurnAfterSpecialTicks = { blast: 3, sweep: attackSpeed - 1, smite: attackSpeed };
@@ -121,6 +127,8 @@ class MadAngelEncounter {
     this.standards = 0; // standard attacks since the last special ended
     this.nextSpecial = 0; // its index in specialOrder
     this.special = null; // { name, startedAt, endsAt, ... }
+    this.magicPrayedLastTick = false; // Protect from Magic on at the end of the last tick
+    this.maxHitEarned = false; // a perfect prayer against a smite: the player's next attack is a maximum hit
     this.enraged = false;
     this.enrageAnnounced = false;
   }
@@ -204,6 +212,7 @@ class MadAngelEncounter {
       this.postTasks.splice(index, 1)[0].task(context);
     }
     if (this.outcome.phase === "resolving" && context.tick >= this.outcome.completionTick) this.outcome = { ...this.outcome, phase: "victory" };
+    this.magicPrayedLastTick = this.praysMagic(context.world.getPlayer());
     const damages = this.pending;
     this.pending = [];
     return damages;
@@ -413,17 +422,42 @@ class MadAngelEncounter {
     special.facing = this.quadrantOf(boss, player);
     if (n < special.cleaves) this.holdFacing(boss, special.facing);
   }
-  // Lightning: once, or three strikes enraged. Not yet: its damage, Protect from Magic, the perfect prayer.
+  // Lightning: once, or three strikes enraged (WIKI, OBS). Each strike is judged on its tick: Protect from Magic switched
+  // on that very tick negates it and earns a maximum hit for the player's next attack; already on, it takes ~75% off;
+  // off, the strike lands whole. Its hitsplat the tick after.
   startSmite(boss, player, context) {
     const strikes = this.enraged ? smite.strikesEnraged : [smite.strikeTicks];
-    this.special = { name: "smite", startedAt: context.tick, endsAt: context.tick + strikes[strikes.length - 1] + 1 };
+    this.special = { name: "smite", startedAt: context.tick, endsAt: context.tick + strikes[strikes.length - 1] + smite.hitAfterTicks, strikes: strikes.map((at) => context.tick + at) };
     this.animate(context, this.enraged ? "smite_enraged" : "smite", [onActor(this.enraged ? spotAnims.smiteEnraged : spotAnims.smite, boss)]);
     for (const at of strikes) {
       this.later(at, (ctx) => {
         const you = ctx.world.getPlayer();
         if (you.alive && this.boss(ctx.world)?.alive) this.animate(ctx, null, [onActor(spotAnims.smiteImpact, you)]);
       });
+      this.laterAfterMove(at, (ctx) => this.strike(ctx));
     }
+  }
+  praysMagic(player) {
+    return player?.activePrayer === "ProtectMagic";
+  }
+  // WIKI: "activating the prayer at the same tick that the lightning strikes will fully negate the damage, as well as
+  // guarantee a maximum hit for the next attack"; a 1-tick flick switches it on that tick too. inferred: the tick of the
+  // strike is that of its impact graphic, 4 ticks after "the blue crackling first becomes visible".
+  strike(context) {
+    const player = context.world.getPlayer();
+    if (!player.alive || !this.boss(context.world)?.alive || this.special?.name !== "smite") return;
+    const prayed = this.praysMagic(player);
+    const perfect = prayed && !this.magicPrayedLastTick;
+    const roll = this.randomInt(smite.damage);
+    const damage = perfect ? 0 : prayed ? Math.floor(roll * smite.prayedShare) : roll;
+    if (perfect) this.maxHitEarned = true;
+    this.laterAfterMove(smite.hitAfterTicks, () => this.hurtFixed("Smite", damage));
+  }
+  // A hit already judged: typeless, so that the prayer of the tick it lands on changes nothing.
+  hurtFixed(source, damage) {
+    const player = this.context.world.getPlayer();
+    if (!player.alive) return;
+    this.pending.push({ source, baseDamage: damage, attackType: "typeless", playerPosition: [...player.position] });
   }
 
   // --- the rules, the end, the snapshot -------------------------------------------------
@@ -431,6 +465,13 @@ class MadAngelEncounter {
     return {
       // inferred: untouchable till she has woken.
       playerDamageOnNpc: (damage, { target }) => (target.id === bossActorId && this.phase === "waking" ? 0 : damage),
+      // WIKI: a perfect prayer against her smite guarantees "a maximum hit for the next attack". The engine asks this
+      // only as an attack is launched.
+      consumePlayerGuaranteedMaxHit: () => {
+        if (!this.maxHitEarned) return false;
+        this.maxHitEarned = false;
+        return true;
+      },
     };
   }
   onNpcDefeated(defeat, context, completionOwnership) {
@@ -455,6 +496,7 @@ class MadAngelEncounter {
         standardsSinceSpecial: this.standards,
         nextSpecial: specialOrder[this.nextSpecial],
         nextAttackAt: this.nextAt,
+        maxHitEarned: this.maxHitEarned,
         special: this.special && {
           name: this.special.name,
           startedAt: this.special.startedAt,
@@ -462,6 +504,7 @@ class MadAngelEncounter {
           side: this.special.side ?? null,
           facing: this.special.facing ?? null,
           ball: this.special.ball ? { tile: [...this.special.ball.tile], landsAt: this.special.ball.landsAt } : null,
+          strikes: this.special.strikes ? [...this.special.strikes] : null,
         },
       },
       visuals: {},

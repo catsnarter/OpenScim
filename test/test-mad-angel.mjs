@@ -33,6 +33,7 @@ async function ticksOf(name) {
         tiles: visuals.flatMap((event) => (event.graphics ?? []).filter((g) => g.target?.kind === "tile").map((g) => [g.spotAnimId, g.target.position])),
         player: [...engine.player().position],
         facing: engine.worldState.getNpc(BOSS)?.facing,
+        prayer: engine.player().activePrayer,
         hp: engine.worldState.getNpc(BOSS)?.vitals.hp,
         state: engine.getEncounterSnapshot().state,
         outcome: engine.getEncounterOutcome().phase,
@@ -110,6 +111,18 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   sweepTicks.forEach((facing, n) => {
     if (n > 0 && facing !== sweepTicks[n - 1]) assert.ok(cleaves.includes(firstDraw + n), "turned at " + (firstDraw + n) + ", not on a cleave");
   });
+  // WIKI: Protect from Magic switched on on the very tick a smite strikes negates it (the hitsplat a tick later, OBS), and
+  // the player's next attack is a maximum hit: the largest of his whole fight.
+  const strikes = ticksWith(ticks, (tick) => tick.graphics.includes(4013));
+  assert.ok(strikes.length >= 1);
+  const maxHit = Math.max(...ticks.flatMap((tick) => tick?.bossHits ?? []));
+  for (const tick of strikes) {
+    assert.equal(ticks[tick].prayer, "ProtectMagic");
+    assert.notEqual(ticks[tick - 1].prayer, "ProtectMagic");
+    assert.deepEqual(ticks[tick + 1].hits, [0], "negated at " + (tick + 1));
+  }
+  const nextHit = ticks.findIndex((tick, n) => n > strikes[0] && tick?.bossHits.some((damage) => damage > 25));
+  assert.ok(ticks[nextHit].bossHits.includes(maxHit), "the next attack is a maximum hit");
   // OBS: her next standard attack 6 ticks after the last cleave (t90 -> t96).
   const lastCleave = cleaves.filter((tick) => tick <= cleaves[0] + 18).at(-1); // the first sweep's fourth
   assert.equal(clipTicks(ticks, "melee").find((tick) => tick > lastCleave), lastCleave + 6);
@@ -126,6 +139,19 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   assert.ok(smite > 0);
   assert.ok(ticks[smite].graphics.includes(4011));
   assert.ok(ticks[smite + 5].graphics.includes(4013));
+  // Unprayed it lands whole, 28 to 32 (OBS 29 to 32), the tick after its impact.
+  assert.ok(ticks[smite + 6].hits.some((damage) => damage >= 28 && damage <= 32));
+}
+
+{
+  // Protect from Magic already on: ~75% off (WIKI), not negated (it was on before the strike), and no maximum hit.
+  const ticks = await ticksOf("magic-prayer");
+  const smite = clipTicks(ticks, "smite")[0];
+  assert.ok(smite > 0, "a smite within the scenario");
+  const hit = ticks[smite + 6].hits.filter((damage) => damage <= 8);
+  assert.equal(hit.length, 1);
+  assert.ok(hit[0] >= 7 && hit[0] <= 8, "a quarter of 28 to 32");
+  assert.ok(ticks.slice(smite).every((tick) => !tick || !tick.state.maxHitEarned));
 }
 
 {
