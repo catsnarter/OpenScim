@@ -10,6 +10,8 @@ import { projectileOverrideOptions, projectileOverrideDefaults, updateProjectile
 import { blindfoldStore, listenForBlindfold } from "/plugins/blindfold.js";
 import { skyboxStore } from "/plugins/skybox.js";
 import { defenceTrackerStore, setDefenceTrackerEngine } from "/plugins/defenceTracker.js";
+import { setCombatAchievementsEngine, observeCombatAchievements, combatAchievementsStore } from "/combatAchievements/index.js";
+import { defaultSettings as combatAchievementsDefaults } from "/combatAchievements/store.js";
 // The replay's undo and markers: their options (Settings, Simulation) and keys.
 import { replayMarkerStore, listenForReplayKeys } from "/replay/markers.js";
 import { attackTimerMetronomeStore, setAttackTimerHdHealthBars } from "/plugins/attackTimerMetronome.js";
@@ -21317,6 +21319,18 @@ var Yme = [
       availability: "Resizable layouts, with Transparent chatbox on",
       layouts: ["resizable"],
     }),
+    Fme("section", ["Interface", "Game chat"], {
+      description: "Chatbox messages of the game: combat achievement task failures.",
+      keywords: ["chat", "game chat", "chatbox", "messages", "combat achievements", "combat tasks"],
+    }),
+    Fme("setting", ["Interface", "Game chat", "Combat Achievements Tasks - Failure"], {
+      description: "A chatbox message saying why, when a combat task fails.",
+      keywords: ["combat achievements", "combat tasks", "ca", "failed", "failure", "task failed", "chat message", "notification"],
+    }),
+    Fme("setting", ["Interface", "Game chat", "Combat Achievements Tasks - Repeat failure"], {
+      description: "The same message for a combat task already completed.",
+      keywords: ["combat achievements", "combat tasks", "ca", "repeat", "completed", "failed", "failure", "chat message"],
+    }),
     Fme("section", ["Interface", "Game window"], {
       whenUnavailable: DESKTOP_ONLY,
       description:
@@ -31051,6 +31065,7 @@ var InterfaceControls = ({
               }),
           ],
         }),
+      (0, jsxRuntime.jsx)(CombatAchievementsChatControl, {}),
       (0, jsxRuntime.jsx)(ShortcutHintsControl, {
         showShortcutHints: showShortcutHints,
         onShowShortcutHintsToggle: onShowShortcutHintsToggle,
@@ -31237,6 +31252,38 @@ var ViewportPopoutControl = ({
           }),
         ],
       });
+// Settings, Interface, Game chat: the game's two settings of combat achievement failures (WIKI: Settings, Chat,
+// Game Chat), kept with the player's combat achievements (client/combatAchievements/store.js).
+const COMBAT_ACHIEVEMENT_CHAT_SETTINGS = [
+  ["failureMessages", "Combat Achievements Tasks - Failure", "Failing a combat task is followed by a chatbox message saying why it failed."],
+  ["repeatFailureMessages", "Combat Achievements Tasks - Repeat failure", "The same, for a combat task already completed."],
+];
+function CombatAchievementsChatControl() {
+  const settings = (0, React.useSyncExternalStore)(combatAchievementsStore.subscribe, () => combatAchievementsStore.getState().settings);
+  return (0, jsxRuntime.jsxs)("div", {
+    className: "control-group",
+    children: [
+      (0, jsxRuntime.jsx)("div", { className: "group-title", children: "Game chat" }),
+      ...COMBAT_ACHIEVEMENT_CHAT_SETTINGS.map(([key, label, hint]) =>
+        (0, jsxRuntime.jsx)(
+          SettingRow,
+          {
+            isModified: settings[key] !== combatAchievementsDefaults[key],
+            onReset: () => combatAchievementsStore.setSetting(key, combatAchievementsDefaults[key]),
+            searchId: eR("Interface", "Game chat", label),
+            hint,
+            children: (0, jsxRuntime.jsx)(OsrsCheckbox, {
+              checked: settings[key],
+              onChange: (checked) => combatAchievementsStore.setSetting(key, checked),
+              label,
+            }),
+          },
+          key,
+        ),
+      ),
+    ],
+  });
+}
 var ShortcutHintsControl = ({
   showShortcutHints: h2 = true,
   onShowShortcutHintsToggle: h3 = () => {},
@@ -51543,6 +51590,15 @@ function AppShell({ devHarness: devHarness } = {}) {
   (0, React.useEffect)(() => {
     setDefenceTrackerEngine(() => engineRef.current);
     return () => setDefenceTrackerEngine(() => null);
+  }, []);
+  // Combat achievements (client/combatAchievements/) read the live fight after each tick the game loop publishes.
+  (0, React.useEffect)(() => {
+    setCombatAchievementsEngine(() => engineRef.current);
+    const unsubscribe = fL.subscribe((tick, events) => observeCombatAchievements(events));
+    return () => {
+      unsubscribe();
+      setCombatAchievementsEngine(() => null);
+    };
   }, []);
   (0, React.useEffect)(() => {
     updateProjectileOverride({ enabled: projectileOverrideEnabled, settings: projectileOverride });
