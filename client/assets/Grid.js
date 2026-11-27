@@ -13823,13 +13823,7 @@ var PERSISTED_SETTINGS_DEFAULTS = {
   hotkeysCloseSidePanel: false,
   clickThroughTransparentChatbox: true,
   hasCompletedTutorial: false,
-  attackTimerMetronomeEnabled: false,
-  attackTimerMetronomeShowBar: true,
-  attackTimerMetronomeShowTicks: false,
-  attackTimerMetronomeFontSize: 24,
-  attackTimerMetronomeAbovePrayerIcon: false,
-  attackTimerMetronomeOffsetX: 0,
-  attackTimerMetronomeOffsetY: 0,
+  // Attack Timer Metronome keeps its own settings (client/plugins/attackTimerMetronome.js).
   npcAttackTimerMetronomeEnabled: false,
   customMenuSwapsEnabled: false,
   customMenuSwaps: "",
@@ -14234,21 +14228,6 @@ var PersistedSettingsShape = {
   hotkeysCloseSidePanel: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.hotkeysCloseSidePanel),
   clickThroughTransparentChatbox: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.clickThroughTransparentChatbox),
   hasCompletedTutorial: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.hasCompletedTutorial),
-  attackTimerMetronomeEnabled: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeEnabled),
-  attackTimerMetronomeShowBar: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeShowBar),
-  attackTimerMetronomeShowTicks: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeShowTicks),
-  attackTimerMetronomeFontSize: zUnknown().transform((ez) =>
-    hRe(ez, 8, 72, PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeFontSize),
-  ),
-  attackTimerMetronomeAbovePrayerIcon: zBoolean().catch(
-    PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeAbovePrayerIcon,
-  ),
-  attackTimerMetronomeOffsetX: zUnknown().transform((ez) =>
-    hRe(ez, -200, 200, PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeOffsetX),
-  ),
-  attackTimerMetronomeOffsetY: zUnknown().transform((ez) =>
-    hRe(ez, -200, 200, PERSISTED_SETTINGS_DEFAULTS.attackTimerMetronomeOffsetY),
-  ),
   npcAttackTimerMetronomeEnabled: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.npcAttackTimerMetronomeEnabled),
   customMenuSwapsEnabled: zBoolean().catch(PERSISTED_SETTINGS_DEFAULTS.customMenuSwapsEnabled),
   customMenuSwaps: zString().catch(PERSISTED_SETTINGS_DEFAULTS.customMenuSwaps),
@@ -54072,8 +54051,6 @@ var Grid = (ez) => {
     infoboxTextOutlineColor: infoboxTextOutlineColor,
     infoboxTextOutlineEnabled: infoboxTextOutlineEnabled,
     tickCounterFontSize: tickCounterFontSize,
-    showAttackTimerMetronome: showAttackTimerMetronome,
-    attackCooldownTicks: hS = null,
     showNpcAttackTimerMetronome: showNpcAttackTimerMetronome,
     hdHealthBars: hdHealthBars,
     entityHider: hU = null,
@@ -55572,7 +55549,6 @@ var Grid = (ez) => {
             colors: tickCounterColors,
           }
         : null,
-      attackCooldown: hS,
     }),
     [
       mZ,
@@ -55582,7 +55558,6 @@ var Grid = (ez) => {
       tickCounterOffsetX,
       tickCounterOffsetY,
       tickCounterColors,
-      hS,
     ],
   );
   const n1 =
@@ -55756,8 +55731,6 @@ var Grid = (ez) => {
                               onCameraChange: lO,
                               speedMultiplier: gl,
                               playerOverheadNumbers: n0,
-                              showAttackTimerMetronome:
-                                showAttackTimerMetronome,
                               showNpcAttackTimerMetronome:
                                 showNpcAttackTimerMetronome,
                               hdHealthBars: hdHealthBars,
@@ -55832,8 +55805,6 @@ var Grid = (ez) => {
                                 paintScale: hf,
                                 speedMultiplier: gl,
                                 playerOverheadNumbers: n0,
-                                showAttackTimerMetronome:
-                                  showAttackTimerMetronome,
                                 showNpcAttackTimerMetronome:
                                   showNpcAttackTimerMetronome,
                                 hdHealthBars: hdHealthBars,
