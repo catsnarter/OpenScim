@@ -30764,6 +30764,77 @@ var KL = {
     defend: -1,
     mainAttack: 12397,
   },
+  // The Fractured Archive's weapons (CACHE: the TFA_HUMAN_* sequence names; the turns are the usual ones, inferred).
+  // The crossbows fire from the left and the right in turn (TFA_HUMAN_ASCENSION_CROSSBOW_FIRE_LEFT/RIGHT_PVN);
+  // only the left is drawn. The Obligator's styles have their own attack animations (weaponCategories.js).
+  34681: { // Ascension crossbows
+    idle: 15110,
+    walk: 15111,
+    run: 15112,
+    walkBack: 15111,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 424,
+    defend: 424,
+    mainAttack: 15114,
+  },
+  34715: { // Obligator
+    idle: 15118,
+    walk: 15119,
+    run: 15121,
+    walkBack: 15120,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15133,
+    defend: 15133,
+    mainAttack: 15123,
+  },
+  34717: { // Obligator (uncharged)
+    idle: 15118,
+    walk: 15119,
+    run: 15121,
+    walkBack: 15120,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15133,
+    defend: 15133,
+    mainAttack: 15123,
+  },
+  34725: { // Zorya's tome
+    idle: 15135,
+    walk: 15136,
+    run: 15138,
+    walkBack: 15137,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15141,
+    defend: 15141,
+    mainAttack: 15139,
+  },
 };
 var qL = {
   53: {
@@ -31338,6 +31409,21 @@ var qL = {
     hitSpotanimHeight: 144,
     sourceName: "Bolts",
   },
+  // Ascension bolts: ASCENSION_CROSSBOWBOLT_TRAVEL and, for the onyx ones, ASCENSION_CROSSBOWBOLT_ONYX_TRAVEL
+  // (CACHE: spot animation names). The heights and timing are the standard bolts' (inferred).
+  ...Object.fromEntries([34684, 34690, 34696, 34702, 34708].map((boltId) => [boltId, {
+    attackAnimation: 15114,
+    castSpotanim: -1,
+    castSpotanimHeight: 92,
+    projectileId: boltId >= 34702 ? 4438 : 4437,
+    projectileStartHeight: 172,
+    projectileEndHeight: 144,
+    projectileSlope: 5,
+    projectileStartDelay: 41,
+    hitSpotanim: -1,
+    hitSpotanimHeight: 144,
+    sourceName: "Ascension bolts",
+  }])),
   9706: {
     attackAnimation: 426,
     castSpotanim: 806,
@@ -31821,6 +31907,20 @@ var qL = {
     projectileSlope: 16,
     projectileStartDelay: 51,
     hitSpotanim: 3368,
+    hitSpotanimHeight: 124,
+  },
+  // Zorya's tome: TFA_HUMAN_ZORYA_TOME_ATTACK, VFX_ZORYA_TOME_STANDARD_SPOTANIM, VFX_ZORYA_TOME_PROJ and
+  // VFX_ZORYA_TOME_IMPACT (CACHE: sequence and spot animation names); heights and timing as the Eye of Ayak's (inferred).
+  34725: {
+    attackAnimation: 15139,
+    castSpotanim: 4433,
+    castSpotanimHeight: 0,
+    projectileId: 4427,
+    projectileStartHeight: 172,
+    projectileEndHeight: 124,
+    projectileSlope: 16,
+    projectileStartDelay: 51,
+    hitSpotanim: 4429,
     hitSpotanimHeight: 124,
   },
 };
@@ -32379,6 +32479,20 @@ var PD = {
   // 472, projectile 473, impact 474; CACHE: spot animations 472 to 474 are
   // models 3473, 9948 and 9949). An ordinary shot draws its arrow instead.
   6724: qL[6724],
+  // Zorya's flow: VFX_ZORYA_TOME_SPECIAL_PROJ and VFX_ZORYA_TOME_SPECIAL_IMPACT (CACHE: spot animation names). The
+  // special's own animation and cast graphic are its definition's (specialAttackDefinitions.js).
+  34725: {
+    attackAnimation: 15140,
+    castSpotanim: -1,
+    castSpotanimHeight: 0,
+    projectileId: 4428,
+    projectileStartHeight: 172,
+    projectileEndHeight: 124,
+    projectileSlope: 16,
+    projectileStartDelay: 51,
+    hitSpotanim: 4430,
+    hitSpotanimHeight: 124,
+  },
   26374: zaryteEvokeVisuals,
   27186: zaryteEvokeVisuals,
   27665: LD,
@@ -36444,8 +36558,8 @@ function SR(e) {
         }
       } else if (mB(n, "attack_started")) {
         const r =
-          n.usingSpecialAttack && n.weaponId !== undefined
-            ? getSpecialAttackDefinition(n.weaponId)
+          n.usingSpecialAttack && (n.specialAttackItemId ?? n.weaponId) !== undefined
+            ? getSpecialAttackDefinition(n.specialAttackItemId ?? n.weaponId)
             : undefined;
         const l = FD(n.weaponId, n.ammoId, n.usingSpecialAttack);
         const o = n.style === "magic" && n.spellCast?.accurate === false;
@@ -36456,13 +36570,24 @@ function SR(e) {
                 hitSpotanim: fR.spotAnimId,
                 hitSpotanimHeight: fR.height,
               }
-            : l;
+            : l && n.hitGraphicId !== undefined
+              ? { ...l, hitSpotanim: n.hitGraphicId } // an attack's own impact (Zorya's flow's buffed attacks)
+              : l;
         if (r?.graphicId !== undefined && r.graphicId >= 0) {
           t = {
             kind: "graphic",
             key: s,
             tick: n.tick,
             spotAnimId: r.graphicId,
+            height: 0,
+          };
+        } else if (!n.usingSpecialAttack && n.attackGraphicId !== undefined) {
+          // A weapon style's own graphic (the Obligator's Thrust: its chain, weaponCategories.js).
+          t = {
+            kind: "graphic",
+            key: s,
+            tick: n.tick,
+            spotAnimId: n.attackGraphicId,
             height: 0,
           };
         } else if (d && d.castSpotanim >= 0) {
@@ -37074,6 +37199,7 @@ function CR(e) {
     case "weapon":
       return [
         e.specAnimationId,
+        e.attackAnimationId,
         iD(e.weaponId, e.attackKind),
         FD(e.weaponId)?.attackAnimation,
         ...lD(e.weaponId).map((e) => e.attack),
@@ -37159,8 +37285,9 @@ function BR(e) {
             kind: "weapon",
             weaponId: i,
             attackKind: r.attackKind,
+            attackAnimationId: r.attackAnimationId,
             specAnimationId: r.usingSpecialAttack
-              ? getSpecialAttackDefinition(i ?? 0)?.animationId
+              ? getSpecialAttackDefinition(r.specialAttackItemId ?? i ?? 0)?.animationId
               : undefined,
           };
     t = {
@@ -47233,12 +47360,13 @@ var SceneCompositor = class e {
         } else {
           const a = weaponId2;
           const t = (
-            e.usingSpecialAttack === true && a !== undefined ? getSpecialAttackDefinition(a) : undefined
+            e.usingSpecialAttack === true && (e.specialAttackItemId ?? a) !== undefined ? getSpecialAttackDefinition(e.specialAttackItemId ?? a) : undefined
           )?.animationId;
           this.pendingPlayerAttack = {
             kind: "weapon",
             weaponId: a,
             attackKind: e.attackKind,
+            ...(e.attackAnimationId !== undefined ? { attackAnimationId: e.attackAnimationId } : {}),
             ...(t !== undefined
               ? {
                   specAnimationId: t,

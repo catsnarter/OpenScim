@@ -18056,6 +18056,7 @@ var pIe = {
   stats: "player-combat",
   specialAttack: "player-combat",
   soulreaperStacks: "player-combat",
+  rondacheCharges: "player-combat",
   combatTimers: "player-combat",
   isSpecialAttackActive: "player-combat",
   pendingSpecialAttackActive: "player-combat",
@@ -43094,6 +43095,7 @@ var Orb = ({
   contextMenuProps: contextMenuProps,
   tooltipProps: tooltipProps,
   "data-tutorial": eX,
+  chargeBar: chargeBar,
 }) => {
   const eY = {
     RFjdX: function (ff, fg) {
@@ -43193,6 +43195,45 @@ var Orb = ({
             WebkitFontSmoothing: "none",
           },
           children: Math.floor(f6),
+        }),
+      // An item's charges under the number (the Rondache's): four segments, each filled in turn (the game's).
+      chargeBar !== undefined &&
+        (0, wn.jsx)("div", {
+          style: {
+            position: "absolute",
+            left: 1,
+            width: circleLeft2 - 2,
+            top: f2.height - 1,
+            height: 4,
+            display: "flex",
+            gap: 1,
+            zIndex: 3,
+          },
+          children: [0, 1, 2, 3].map((segment) =>
+            (0, wn.jsx)(
+              "div",
+              {
+                style: {
+                  flex: 1,
+                  background: "#1a1a1a",
+                  boxShadow: "0 0 0 1px #000",
+                  position: "relative",
+                  overflow: "hidden",
+                },
+                children: (0, wn.jsx)("div", {
+                  style: {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: Math.max(0, Math.min(1, chargeBar * 4 - segment)) * 100 + "%",
+                    background: "#00c800",
+                  },
+                }),
+              },
+              segment,
+            ),
+          ),
         }),
       (0, wn.jsx)(Vse, {
         src: fe,
@@ -43362,6 +43403,7 @@ var MinimapOrbs = ({
   runEnergy: runEnergy,
   specialAttack: specialAttack,
   soulreaperStacks: soulreaperStacks,
+  rondacheCharges: rondacheCharges,
   isRunEnabled: isRunEnabled,
   isSpecialAttackActive: isSpecialAttackActive,
   pendingSpecialAttackToggles: pendingSpecialAttackToggles,
@@ -43560,6 +43602,8 @@ var MinimapOrbs = ({
         alt: "Special Attack",
         current: soulreaperStacks ?? specialAttack,
         max: soulreaperStacks === undefined ? 100 : 5,
+        // The Rondache's charges, out of 20, in the bar under the orb's number (as the game draws it).
+        chargeBar: rondacheCharges === undefined ? undefined : rondacheCharges / 20,
         fillSprite: f8 ? MINIMAP.orbSpecialActivated : MINIMAP.orbSpecial,
         iconSprite:
           undefined === soulreaperStacks
@@ -44886,6 +44930,7 @@ var Minimap = (0, pn.forwardRef)(function (
     runEnergy: Math.floor(simulationState.runEnergy.energy / 100),
     specialAttack: simulationState.specialAttack.energy,
     soulreaperStacks: soulreaperStacks,
+    rondacheCharges: simulationState.rondacheCharges,
     isRunEnabled: isRunEnabled ?? simulationState.isRunEnabled,
     isSpecialAttackActive:
       isSpecialAttackActive ??
@@ -55936,10 +55981,10 @@ var Grid = (ez) => {
                           mapSquare: KFe(encounterKind),
                           speedMultiplier: gl,
                           arenaBounds: getArenaBounds(),
-                          hasSpecialAttack: K$e(
-                            playerEquipment?.weapon,
-                            enumTypeLoader,
-                          ),
+                          // The Rondache's special is the shield's (specialAttackDefinitions.js).
+                          hasSpecialAttack:
+                            K$e(playerEquipment?.weapon, enumTypeLoader) ||
+                            K$e(playerEquipment?.shield, enumTypeLoader),
                           soulreaperStacks: getSoulreaperStacksForWeapon(
                             playerEquipment?.weapon,
                             simulationState.soulreaperStacks,
@@ -56205,10 +56250,10 @@ var Grid = (ez) => {
                           isSpecialAttackActive: lB,
                           pendingSpecialAttackToggles: lC,
                           onSpecialAttackToggle: onSpecialAttackToggle,
-                          hasSpecialAttack: K$e(
-                            playerEquipment?.weapon,
-                            enumTypeLoader,
-                          ),
+                          // The Rondache's special is the shield's (specialAttackDefinitions.js).
+                          hasSpecialAttack:
+                            K$e(playerEquipment?.weapon, enumTypeLoader) ||
+                            K$e(playerEquipment?.shield, enumTypeLoader),
                           quickPrayersActive: quickPrayersActive,
                           onQuickPrayerToggle: onQuickPrayerToggle,
                           onQuickPrayerSetup: onQuickPrayerSetup,
