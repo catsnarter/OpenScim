@@ -136,6 +136,44 @@ var weaponCategoryDefinitions = {
       },
     ],
   },
+  // The Obligator's own styles (WIKI: Obligator): two Thrusts at 5 ticks and a Smash at 3, all crush. A style's
+  // `attackSpeed` replaces the weapon's (CACHE: 5 ticks, param 14) and its `attackAnimationId` the weapon's attack
+  // animation; no other style sets either. The animations are TFA_HUMAN_OBLIGATOR_MULTIHIT (15123) for the Thrust,
+  // which hits through to the tiles behind, and TFA_HUMAN_OBLIGATOR_ATTACK (15122) for the Smash (CACHE: sequence
+  // names; which is which is inferred from them). The icons are the polearm's Jab and the bludgeon's Smash (inferred).
+  // The Thrust's chain, which the animation hides, is a graphic of its own, by weapon (`attackGraphicIdByWeaponId`):
+  // VFX_OBLIGATOR_CHARGED_THRUST_MALE (4423) and VFX_OBLIGATOR_UNCHARGED_THRUST_MALE (4424), the mace's head on the
+  // animation VFX_OBLIGATOR_CHARGED_THRUST_MALE (CACHE: spot animations 4423 and 4424, sequence 15125). The player
+  // is always drawn male here.
+  obligator: {
+    name: "Obligator",
+    styles: [
+      {
+        name: "Thrust",
+        attackType: "Crush",
+        combatStyle: "Accurate",
+        icon: "polearm_jab.png",
+        attackAnimationId: 15123,
+        attackGraphicIdByWeaponId: { 34715: 4423, 34717: 4424 },
+      },
+      {
+        name: "Thrust",
+        attackType: "Crush",
+        combatStyle: "Aggressive",
+        icon: "polearm_jab.png",
+        attackAnimationId: 15123,
+        attackGraphicIdByWeaponId: { 34715: 4423, 34717: 4424 },
+      },
+      {
+        name: "Smash",
+        attackType: "Crush",
+        combatStyle: "Aggressive",
+        icon: "bludgeon_smash.png",
+        attackSpeed: 3,
+        attackAnimationId: 15122,
+      },
+    ],
+  },
   bulwark: {
     name: "Bulwark",
     styles: [
@@ -600,6 +638,7 @@ var weaponCategoryDefinitions = {
   },
 };
 var weaponCategoryByItemId = {
+  34715: "obligator", 34717: "obligator", // Obligator, charged and uncharged (WIKI: Obligator)
   23849: "polearm", 23850: "polearm", 23851: "polearm", // TABLE: corrupted halberds, basic to perfected
   23852: "powered_staff", 23853: "powered_staff", 23854: "powered_staff", // TABLE: corrupted staves
   23855: "bow", 23856: "bow", 23857: "bow", // TABLE: corrupted bows

@@ -402,6 +402,16 @@ function resolveDamageSpecForMaxHit(damageSpec, attackContext) {
         return uniformDamage;
       }
     }
+    // The highest of `rolls` uniform rolls from 0 to the max hit, as the weights of each damage: k is the highest
+    // in (k + 1)^n - k^n of the (max + 1)^n ways the rolls can fall (the charged Obligator's Thrust, profiles.js).
+    case "highestOfUniformToMaxHit":
+      return {
+        kind: "weighted",
+        outcomes: Array.from({ length: attackContext.maxHit + 1 }, (_, damage) => ({
+          damage,
+          weight: (damage + 1) ** damageSpec.rolls - damage ** damageSpec.rolls,
+        })),
+      };
     case "uniformMaxHitFractionBounds":
       return {
         kind: "uniform",
@@ -665,8 +675,10 @@ function buildPlayerAttackPlan(planInput) {
     return attackPlan;
   }
 }
-function adjustEquipmentStatsForAttack(planInput, equipmentStats) {
+function adjustEquipmentStatsForAttack(planInput, unadjustedStats) {
   const weapon = planInput.player.equipment.weapon;
+  const equipmentStats =
+    planInput.addedAttackCrush === undefined ? unadjustedStats : { ...unadjustedStats, attackCrush: unadjustedStats.attackCrush + planInput.addedAttackCrush };
   const quiverAdjustedStats =
     "ammo" === planInput.resources.kind &&
     planInput.player.equipment.cape !== undefined &&
