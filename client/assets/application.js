@@ -11547,9 +11547,6 @@ var EquipmentSettings = ({
               src: dm(hb),
               alt: h8.label,
               style: phe,
-              onError: (hr) => {
-                hr.currentTarget.style.display = "none";
-              },
             }));
       const hm =
         (hd

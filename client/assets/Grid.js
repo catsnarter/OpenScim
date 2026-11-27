@@ -8068,7 +8068,13 @@ document.addEventListener(
   "error",
   (event) => {
     const image = event.target;
-    if (!(image instanceof HTMLImageElement) || image.dataset.remoteIcon) {
+    if (!(image instanceof HTMLImageElement)) {
+      return;
+    }
+    // The host's icon failed too: hide the image rather than show a broken one. An image's own onError can't do
+    // this, since this listener (capture) has already set the host's URL when the first error reaches it (#104).
+    if (image.dataset.remoteIcon) {
+      image.style.display = "none";
       return;
     }
     const match = /\/assets\/items\/(\d+)\.png$/.exec(image.src);
@@ -12694,7 +12700,7 @@ var MechanicsSettings = ({
     if (type === "color" && fv) return null;
     if (type === "color") {
       const color = typeof fq === "string" && /^#[0-9a-f]{6}$/i.test(fq) ? fq : (fr || "#ffffff");
-      const colorSetting = (0, wn.jsx)(Coe, {
+      const colorSetting = (0, wn.jsx)(SettingRow, {
         searchId: null,
         isModified: fs,
         hideReset: null == defaultConfig,
