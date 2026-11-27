@@ -22,7 +22,7 @@ function prayFor(api, tick) {
   if (api.player().activePrayer !== want) protect(api, want);
 }
 
-// On the ball's tile to bounce it; out of the half a cleave will sweep, to the corner of her opposite it. Returns true
+// On the ball's tile to bounce it; out of the half a cleave will sweep, to her side opposite her sword. Returns true
 // when the player is busy with one of them.
 function counter(api) {
   const special = state(api).special;
@@ -39,8 +39,8 @@ function counter(api) {
     const front = directions[special.facing];
     const left = leftOf(front);
     const toSide = special.side === "left" ? left : [-left[0], -left[1]];
-    // Two tiles past her middle, away from both the front and the sword: behind her, on her other side.
-    return go([at[0] + 1 - 2 * (front[0] + toSide[0]), at[1] + 1 - 2 * (front[1] + toSide[1])]);
+    // Beside her, on the side opposite the sword, a tile out from her edge: out of the cleave, and to her side.
+    return go([at[0] + 1 - 2 * toSide[0], at[1] + 1 - 2 * toSide[1]]);
   }
   return false;
 }

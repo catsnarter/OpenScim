@@ -13,9 +13,9 @@
 // At 350 hitpoints she enrages ("...!"): her specials come quicker, and from
 // then on one after another, the three of them first.
 //
-// The blast, the sweep and the smite are whole, the smite's perfect prayer
-// earning a maximum hit. Not yet: the accurate hit a dodge of the sweep to
-// her side earns.
+// Her mechanics are whole: a cleave dodged to her side earns the player's
+// next attack a sure hit of at least half his maximum, a perfect prayer
+// against her smite a maximum hit.
 //
 // Sources: WIKI Mad Angel and Mad Angel/Strategies; TABLE her stats
 // (client/data/monsters.js, 16305); CACHE her ids (ids.js); OBS one kill
@@ -75,6 +75,9 @@ const sweep = {
   marginEnraged: 1,
   damage: [22, 28], // inferred: OBS 11 to 14 through Protect from Melee, which WIKI halves it
   prayedShare: 0.5, // WIKI: "Protect from Melee will reduce the damage from being caught in this attack by ~50%"
+  // WIKI: "If an attack is successfully dodged to the side (not behind it), the player's next attack will be 100%
+  // accurate and have its minimum hit raised to 50% of their maximum hit." inferred: rounded down.
+  dodgedMinimumShare: 0.5,
 };
 // The four ways she faces, and her left of each (as she faces south, her left is east).
 const directions = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
@@ -129,6 +132,7 @@ class MadAngelEncounter {
     this.special = null; // { name, startedAt, endsAt, ... }
     this.magicPrayedLastTick = false; // Protect from Magic on at the end of the last tick
     this.maxHitEarned = false; // a perfect prayer against a smite: the player's next attack is a maximum hit
+    this.sideDodged = false; // a cleave dodged to her side: the player's next attack is sure, and at least half his maximum
     this.enraged = false;
     this.enrageAnnounced = false;
   }
@@ -378,6 +382,13 @@ class MadAngelEncounter {
   releaseFacing(boss) {
     if (boss) delete boss.lockedFacing;
   }
+  // To her left or right as she faces, not in front of her and not behind her.
+  isBeside(boss, player, facing) {
+    const [u, v] = this.offsetOf(boss, player);
+    const [fx, fy] = directions[facing];
+    const [lx, ly] = leftOf(directions[facing]);
+    return Math.abs(u * lx + v * ly) > Math.abs(u * fx + v * fy);
+  }
   sweepClip(side, step) {
     // CACHE: enraged she has her own draw, cleave and across, and the reset of her calm sweep (OBS: 14432 at t184).
     return step !== "reset" && this.enraged ? `sweep_${side}Enraged_${step}` : `sweep_${side}_${step}`;
@@ -418,6 +429,7 @@ class MadAngelEncounter {
     const clip = n === special.cleaves ? this.sweepClip(special.side, "reset") : this.sweepClip(special.side, across ? "across" : "cleave");
     this.animate(context, clip, swept.map((tile) => onTile(spotAnims.cleave, tile)));
     if (player.alive && inHalf(player.position)) this.hurt("Sweep", sweep.damage, "melee", sweep.prayedShare);
+    else if (player.alive && this.isBeside(boss, player, special.facing)) this.sideDodged = true;
     if (across) special.side = special.side === "left" ? "right" : "left";
     special.facing = this.quadrantOf(boss, player);
     if (n < special.cleaves) this.holdFacing(boss, special.facing);
@@ -467,12 +479,20 @@ class MadAngelEncounter {
       playerDamageOnNpc: (damage, { target }) => (target.id === bossActorId && this.phase === "waking" ? 0 : damage),
       // WIKI: a perfect prayer against her smite guarantees "a maximum hit for the next attack". The engine asks this
       // only as an attack is launched.
+      // WIKI: after a cleave dodged to her side, the player's next attack is "100% accurate" and at least half his
+      // maximum. Spent as the attack starts (onPlayerAttackStarted): the engine plans an attack before it starts it.
+      playerAlwaysAccurate: (context, { target }) => this.sideDodged && target?.id === bossActorId,
+      playerMinimumHit: (maximum, context, { target }) =>
+        this.sideDodged && target?.id === bossActorId ? Math.floor(maximum * sweep.dodgedMinimumShare) : 0,
       consumePlayerGuaranteedMaxHit: () => {
         if (!this.maxHitEarned) return false;
         this.maxHitEarned = false;
         return true;
       },
     };
+  }
+  onPlayerAttackStarted(attack) {
+    if (attack.targetId === bossActorId) this.sideDodged = false;
   }
   onNpcDefeated(defeat, context, completionOwnership) {
     if (defeat.npcId !== bossActorId) return;
@@ -497,6 +517,7 @@ class MadAngelEncounter {
         nextSpecial: specialOrder[this.nextSpecial],
         nextAttackAt: this.nextAt,
         maxHitEarned: this.maxHitEarned,
+        sideDodged: this.sideDodged,
         special: this.special && {
           name: this.special.name,
           startedAt: this.special.startedAt,

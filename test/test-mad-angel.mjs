@@ -111,6 +111,14 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   sweepTicks.forEach((facing, n) => {
     if (n > 0 && facing !== sweepTicks[n - 1]) assert.ok(cleaves.includes(firstDraw + n), "turned at " + (firstDraw + n) + ", not on a cleave");
   });
+  // WIKI: a cleave dodged to her side makes the player's next attack on her sure to hit, and at least half his maximum;
+  // spent as that attack starts.
+  const dodged = ticksWith(ticks, (tick) => tick.state.sideDodged);
+  assert.ok(dodged.length > 0 && cleaves.includes(dodged[0]), "earned on a cleave");
+  const spentAt = dodged.find((tick, n) => dodged[n + 1] !== tick + 1);
+  const rewarded = ticks.slice(spentAt + 1).find((tick) => tick?.bossHits.length)?.bossHits ?? [];
+  const best = Math.max(...ticks.flatMap((tick) => tick?.bossHits ?? []));
+  assert.ok(rewarded.some((damage) => damage >= Math.floor(best / 2)), "a sure hit of at least half the maximum: " + rewarded);
   // WIKI: Protect from Magic switched on on the very tick a smite strikes negates it (the hitsplat a tick later, OBS), and
   // the player's next attack is a maximum hit: the largest of his whole fight.
   const strikes = ticksWith(ticks, (tick) => tick.graphics.includes(4013));
