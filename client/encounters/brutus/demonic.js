@@ -68,6 +68,7 @@ const rotations = [
 const sides = ["N", "E", "S", "W"]; // clockwise
 const corners = ["NE", "SE", "SW", "NW"]; // clockwise
 const step = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
+const dashFacings = { S: 0, W: 512, N: 1024, E: 1536 }; // the game's facings (2048ths: 0 south, 512 west)
 const orbStyles = ["magic", "melee", "ranged"]; // OBS: cyan, red, yellow, in every special; the fourth at random
 const orbAttackTypes = { magic: "magic", melee: "melee", ranged: "range" }; // the engine's names (engine/damage.js)
 
@@ -388,16 +389,18 @@ class DemonicBrutusEncounter {
       this.animate(context, null, null, special.orbs.map((style, n) => onActor(orbSpotAnims.spawn[style], player, this.orbHeight(n))));
     }
   }
-  // A bull appears where place() put it, facing the tile it is round, with the animation that brings it to its hit:
-  // he moves there; a ghost is spawned. Each keeps that facing through its charge or slam (OBS: every ghost turned to
-  // the player; a charge runs straight at him); his is let go when the special ends.
+  // A bull appears where place() put it, with the animation that brings it to its hit: he moves there; a ghost is
+  // spawned. A slamming bull faces the tile it is round (OBS: every ghost turned to the player); a charging one, the way
+  // it dashes (his lane is off the player's middle). Each keeps that facing through its charge or slam; his is let go
+  // when the special ends.
   appear(context, n) {
     const special = this.special;
     const bull = special?.bulls[n];
     if (!bull) return;
     const charging = special.name === "charge";
     const facePlayer = (actor) => {
-      faceActorToward(actor, { position: special.at, size: 1 });
+      if (charging) actor.facing = dashFacings[bull.direction];
+      else faceActorToward(actor, { position: special.at, size: 1 });
       actor.lockedFacing = actor.facing;
       return actor;
     };

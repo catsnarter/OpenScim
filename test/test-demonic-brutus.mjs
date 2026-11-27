@@ -102,11 +102,15 @@ const specials = (ticks) =>
     const lead = special.name === "slam" ? 2 : 1;
     for (let n = 0; n < 3; n++) assert.equal(ticks[special.firstBullAt - lead + n].ghosts, n, `ghosts ${lead} ticks before bull ${n}`);
     assert.equal(ticks[special.firstBullAt + 2].ghosts, 3);
-    // He and each ghost face the player as they appear (OBS: every ghost turned to him).
+    // As they appear, slamming bulls face the player (OBS: every ghost turned to him); charging ones, the way they
+    // dash (N, E, S, W round the player clockwise from the west: east, south, west, north).
+    const dashFacings = { W: 1536, N: 0, E: 512, S: 1024 }; // by the side a bull comes from
     for (let n = 0; n < 4; n++) {
       const appeared = ticks[special.firstBullAt - lead + n].facings.filter((bull) => (n === 0 ? bull.id === "brutus" : bull.id !== "brutus"));
       const bull = n === 0 ? appeared[0] : appeared.at(-1);
-      assert.equal(bull.facing, bull.toPlayer, `bull ${n} after the fade at ${special.fadedAt}`);
+      const from = special.bulls[n].from;
+      const expected = special.name === "charge" ? dashFacings[from] : bull.toPlayer;
+      assert.equal(bull.facing, expected, `bull ${n} (from ${from}) after the fade at ${special.fadedAt}`);
     }
     assert.equal(ticks[special.firstBullAt + 6]?.ghosts ?? 0, 0);
   }
