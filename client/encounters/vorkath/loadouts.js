@@ -3,8 +3,8 @@
 // until about a third of her hitpoints and diamond dragon bolts (e) after, an extended super antifire, and Crumble
 // Undead from a rune pouch for the spawn. The guide's best crossbows are the ascensions; the dragon hunter crossbow is
 // its next and the one a mid-level account brings. The guide's armour rows: crystal, an anguish, Ava's assembler,
-// Barrows gloves, Pegasian boots and an Archers ring (i). Anti-venom is not drinkable in the client yet: an Antidote++
-// takes its place. Sharks are not edible in the client: anglerfish.
+// Barrows gloves, Pegasian boots and an Archers ring (i). Its anti-venom is the extended anti-venom+. Sharks are not
+// edible in the client: anglerfish.
 const anglerfish = 13441;
 
 export const vorkathLoadouts = {
@@ -26,7 +26,7 @@ export const vorkathLoadouts = {
       22209, // Extended super antifire(4)
       23733, // Divine ranging potion(4)
       3024, 3024, 3024, // Super restore(4)
-      5952, // Antidote++(4)
+      29824, // Extended anti-venom+(4)
       21946, // Diamond dragon bolts (e), for below a third
       12791, // Rune pouch: earth, air, chaos for Crumble Undead
       ...Array(20).fill(anglerfish),
