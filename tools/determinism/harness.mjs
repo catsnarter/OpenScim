@@ -97,7 +97,7 @@ export function loadEnvironment() {
       rendering.registerArenaConfig(descriptor.kind, arena);
     }
     // getEncounterControls: the controls of an encounter kind (mechanics toggles, debug actions), as the menus read them.
-    return { engineModule, objTypeLoader: cacheManager.getObjTypeLoader(), prepareArena, registry, controlsOf: rendering.getEncounterControls, rendering };
+    return { engineModule, objTypeLoader: cacheManager.getObjTypeLoader(), npcTypeLoader: cacheManager.getNpcTypeLoader(), prepareArena, registry, controlsOf: rendering.getEncounterControls, rendering };
   })());
 }
 

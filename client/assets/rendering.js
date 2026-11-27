@@ -8806,6 +8806,27 @@ var NpcType = class extends Type {
         a.readUnsignedByte();
       } else if (e >= 170 && e < 176) {
         a.readUnsignedShort();
+      } else if (e === 130 || e === 147) {
+        // Flags with no operands (RuneLite's NpcLoader: 147, zbuf off); nothing here reads them (#148).
+      } else if (e === 251 || e === 252 || e === 253) {
+        // A menu option: 251 one under another (u8 index, u8 sub-id, string), 252 one shown while a game variable is
+        // in a range (u8 index, u16 varp, u16 varbit, i32 min, i32 max, string), 253 both (u8 index, u16 sub-id,
+        // u16 varp, u16 varbit, i32 min, i32 max, string) (RuneLite's EntityOpsLoader). Nothing here shows them; read
+        // so that what follows is (before, they were read as opcodes and cut 9 NPCs short, #148).
+        const op = { opcode: e, index: a.readUnsignedByte() };
+        if (e === 251) {
+          op.subId = a.readUnsignedByte();
+        } else {
+          if (e === 253) {
+            op.subId = a.readUnsignedShort();
+          }
+          op.varp = a.readUnsignedShort();
+          op.varbit = a.readUnsignedShort();
+          op.min = a.readInt();
+          op.max = a.readInt();
+        }
+        op.text = this.readString(a);
+        (this.extraOps ??= []).push(op);
       } else if (e === 249) {
         this.params = Type.readParamsMap(a, this.params);
       } else {
