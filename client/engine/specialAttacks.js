@@ -353,8 +353,16 @@ function applySpecialAttackEffects(attacker, target, damage, specialEffects, tic
         if ("on-hit" === trigger && isNpcBindImmuneAtTick(target, tick)) {
           break;
         }
+        // A bind is a freeze: its length scales with the target's freeze resistance as the freeze's does above
+        // (inferred: no source gives a bind's length under a partial resistance), and a target immune to freezes
+        // (TABLE: 100) isn't bound. The Doom's burrowed form is immune in the table, but in his fight he keeps the
+        // standing form's formula stats while burrowed, so his burrow drops a bind itself (burrow.js, #156).
+        const bindTicks = Math.floor((specialEffect.durationTicks * Math.max(0, 100 - (target.formulaStats?.freezeResistance ?? 0))) / 100);
+        if (bindTicks <= 0) {
+          break;
+        }
         const bindFromTick = tick + (specialEffect.delayTicks ?? 0);
-        const bindUntilTick = bindFromTick + specialEffect.durationTicks;
+        const bindUntilTick = bindFromTick + bindTicks;
         const boundFromTick = target.debuffs.boundFromTick;
         const boundUntilTick = target.debuffs.boundUntilTick;
         const overlapsExistingBind =
