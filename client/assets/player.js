@@ -47,9 +47,9 @@ var CacheDatabase = class {
   constructor() {
     l(this, "dbPromise", null);
     l(this, "dbGeneration", 0);
-    this.eC();
+    this.requestPersistentStorage();
   }
-  async eC() {
+  async requestPersistentStorage() {
     if (
       !hasRequestedPersistentStorage &&
       ((hasRequestedPersistentStorage = true),
@@ -130,7 +130,7 @@ var CacheDatabase = class {
     });
     return this.dbPromise;
   }
-  async tC(P, Q, R = 0) {
+  async storeCacheFile(P, Q, R = 0) {
     try {
       const T = await this.openDatabase();
       return new Promise((U, V) => {
@@ -200,7 +200,7 @@ var CacheDatabase = class {
       };
     });
   }
-  async aC(P, Q, R = 0) {
+  async getCacheFilesParallel(P, Q, R = 0) {
     const T = await this.openDatabase();
     const U = new Map();
     return new Promise((V, W) => {
@@ -237,7 +237,7 @@ var CacheDatabase = class {
       X.onerror = () => W(new Error("Transaction failed: " + X.error?.message));
     });
   }
-  async Sm(P, Q = 0) {
+  async hasCacheFile(P, Q = 0) {
     const S = await this.openDatabase();
     return new Promise((T, U) => {
       const W = S.transaction("blobs", "readonly")
@@ -313,7 +313,7 @@ var CacheDatabase = class {
       };
     });
   }
-  async oC(P) {
+  async deleteCacheMeta(P) {
     const Q = await this.openDatabase();
     return new Promise((R, S) => {
       const T = Q.transaction("meta", "readwrite");
@@ -438,7 +438,9 @@ var CacheDownloadClient = class {
         "mirror" === this.mode
           ? this.baseUrl + "/manifest.json"
           : this.baseUrl + "/caches.json";
-      const W = await m(() => v(V));
+      // index.html asked for the manifest while this script was on its way.
+      const early = "mirror" === this.mode ? globalThis.__cacheBoot?.manifest : null;
+      const W = (await early?.catch(() => null)) ?? (await m(() => v(V)));
       let X;
       if ("mirror" === this.mode) {
         if (
@@ -565,6 +567,18 @@ var CacheDownloadClient = class {
       },
       sQjOh: "Cache",
     };
+    // index.html asked for the whole cache while this script was on its way
+    // (a first visit to a route without a boot pack): take over its download.
+    await globalThis.__cacheBoot?.pack?.catch(() => null); // settled: it has decided
+    const early = globalThis.__cacheBoot?.whole;
+    if (early?.url === P) {
+      globalThis.__cacheBoot.whole = null;
+      early.onprogress = () => Q?.(Math.min(99, Math.round((early.loaded / (R.estimatedTotalBytes || 167772160)) * 100)), early.loaded);
+      early.onprogress();
+      try {
+        return await early.bytes;
+      } catch {}
+    }
     const { bytes: bytes, contentType: contentType } = await N(P, {
       onProgress: (V, W) => {
         const X = W ?? (R.estimatedTotalBytes || 167772160);
@@ -664,6 +678,12 @@ var CacheManager = class {
     l(this, "rsCacheInfo", null);
     l(this, "xteaKeys", new Map());
     l(this, "additionalMapSquares", new Map());
+    l(this, "store", null);
+    // While the whole cache is on its way behind a boot pack (bootFromPack):
+    // settles when it is under the loaders.
+    l(this, "hydration", null);
+    // Lets the whole cache start downloading; nothing to do without a boot pack.
+    l(this, "beginHydration", () => {});
     this.storage = P || new CacheDatabase();
     this.client = Q || new CacheDownloadClient();
   }
@@ -709,7 +729,7 @@ var CacheManager = class {
         };
     }
   }
-  async Ad(P) {
+  async ensureCache(P) {
     const Q = {
       IcPCE: function (R, S) {
         return R || S;
@@ -743,7 +763,7 @@ var CacheManager = class {
     if ("LOADED" !== this.state) {
       if ("DOWNLOADING" === this.state || "EXTRACTING" === this.state) {
         e.end("CacheManager.ensureCache");
-        return this.CC("LOADED");
+        return this.waitForState("LOADED");
       }
       try {
         let R = P;
@@ -757,7 +777,7 @@ var CacheManager = class {
         }
         r(R, this.cacheInfo?.diskZipSha256);
         e.start("CacheManager.checkIndexedDB");
-        const S = await this.mC(R);
+        const S = await this.readStoredMeta(R);
         e.end("CacheManager.checkIndexedDB");
         const T = this.cacheInfo?.diskZipSha256;
         const U = (function (X, Y) {
@@ -777,10 +797,10 @@ var CacheManager = class {
           );
           this.pC("loading-from-storage", 0, "Reading from browser storage...");
           this.setState("DOWNLOADING");
-          const X = await this.$C(R);
+          const X = await this.readStoredFiles(R);
           if (X) {
             this.pC("initializing", 8, "Initializing cache system...");
-            await this.MC(X);
+            await this.initializeCacheSystem(X);
             this.setState("LOADED");
             e.end("CacheManager.ensureCache");
             return;
@@ -802,7 +822,9 @@ var CacheManager = class {
             "Cache " + R + " not found in IndexedDB, downloading...",
           );
         }
-        await this.fC(R);
+        if (!(await this.bootFromPack(R))) {
+          await this.fC(R);
+        }
         e.end("CacheManager.ensureCache");
       } catch (Y) {
         e.end("CacheManager.ensureCache");
@@ -854,17 +876,17 @@ var CacheManager = class {
       this.pC("extracting", 0, "Unpacking cache archive...");
       this.setState("EXTRACTING");
       e.start("CacheManager.extractZip");
-      const W = await this.bC(data);
+      const W = await this.extractZip(data);
       e.end("CacheManager.extractZip");
       let X = false;
       if (matchesManifest) {
         this.pC("storing", 0, "Saving to browser storage...");
         e.start("CacheManager.storeToIndexedDB");
-        X = await this.EC(P, W);
+        X = await this.storeFiles(P, W);
         e.end("CacheManager.storeToIndexedDB");
       }
-      await this.MC(W);
-      if (X && (await this.LC(P))) {
+      await this.initializeCacheSystem(W);
+      if (X && (await this.storeMeta(P))) {
         await this.AC(P);
       }
       this.setState("LOADED");
@@ -881,7 +903,123 @@ var CacheManager = class {
       throw Y;
     }
   }
-  async mC(P) {
+  // A first visit starts from the route's boot pack: a cache of the groups
+  // the route reads on the way to its first frame (tools/boot-packs.mjs), a
+  // fifth of the whole. The whole cache follows behind the running game
+  // (hydrate). False when the route has no pack or it would not load: the
+  // caller downloads the whole cache first, as it always did.
+  async bootFromPack(P) {
+    const name =
+      location.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "lobby";
+    const pack = this.cacheInfo?.bootPacks?.[name];
+    if (!pack || globalThis.__noBootPack) {
+      return false;
+    }
+    try {
+      this.pC("downloading", 0, "Connecting to cache server...");
+      this.setState("DOWNLOADING");
+      const url =
+        this.client.baseUrl + "/boot/" + name + ".zip?v=" + pack.sha256;
+      const totalMB = (pack.bytes / 1048576).toFixed(1);
+      // index.html asked for it while this script was still on its way.
+      const early = await globalThis.__cacheBoot?.pack?.catch(() => null);
+      const bytes =
+        early?.url === url
+          ? early.bytes
+          : (
+              await N(url, {
+                onProgress: (loaded) =>
+                  this.pC(
+                    "downloading",
+                    Math.min(99, Math.round((loaded / pack.bytes) * 100)),
+                    (loaded / 1048576).toFixed(1) + " MB / " + totalMB + " MB",
+                  ),
+              })
+            ).bytes;
+      if (!(await matchesSha256(bytes, pack.sha256))) {
+        throw new Error("it does not match its published checksum");
+      }
+      this.pC("extracting", 0, "Unpacking cache archive...");
+      this.setState("EXTRACTING");
+      await this.initializeCacheSystem(await this.extractZip(bytes));
+    } catch (error) {
+      f.warn(
+        "Cache",
+        "Could not start from boot pack " +
+          name +
+          "; downloading the whole cache first instead:",
+        error,
+      );
+      return false;
+    }
+    // The whole cache waits for the world to be on screen (beginHydration,
+    // which the application calls when its own assets are in): its 24 MB
+    // would take the line from the images the first frame is waiting for.
+    const begun = new Promise((resolve) => {
+      this.beginHydration = resolve;
+    });
+    setTimeout(this.beginHydration, 30000);
+    this.hydration = begun
+      .then(() => this.hydrate(P))
+      .catch((error) => {
+        f.error(
+          "Cache",
+          "Could not load the whole cache behind boot pack " +
+            name +
+            "; what the pack lacks stays missing until a reload:",
+          error,
+        );
+      })
+      .then(() => {
+        this.hydration = null;
+      });
+    this.setState("LOADED");
+    return true;
+  }
+  // Puts the whole cache under the loaders that started from a boot pack.
+  // The pack has the whole cache's reference tables and, for the groups it
+  // holds, the same bytes, so what the loaders have read stays true; a group
+  // the pack left out read as empty and is there from now on.
+  async hydrate(P) {
+    const sha = this.cacheInfo?.diskZipSha256;
+    const size = this.cacheInfo?.size;
+    const { data: data, matchesManifest: matchesManifest } =
+      await this.client.fC(P, () => {}, {
+        ...(size ? { estimatedTotalBytes: size } : {}),
+        ...(sha ? { diskZipSha256: sha } : {}),
+      });
+    const files = await this.extractZip(data);
+    const whole = B.bm("dat2", files, REQUIRED_CACHE_INDEXES).getIndex(
+      REQUIRED_CACHE_INDEXES[0],
+    ).store;
+    this.store.dataFile = whole.dataFile;
+    this.store.indexFiles = whole.indexFiles;
+    this.store.metaFile = whole.metaFile;
+    f.info("Cache", "Whole cache " + P + " is under the boot pack");
+    if (matchesManifest) {
+      // Not awaited: the game has the cache; the next visit wants it stored.
+      this.storeFiles(P, files, true)
+        .then((stored) => stored && this.storeMeta(P))
+        .then((marked) => marked && this.AC(P));
+    }
+  }
+  // Whether a boot pack left this group out and the whole cache, still on its
+  // way, has it: the pack marks its idx entry "size 0, sector 1" (packCache,
+  // tools/assets/cache.mjs).
+  awaitsWholeCache(index, group) {
+    const idx = this.store?.indexFiles[index];
+    if (!this.hydration || !idx || group < 0 || group * 6 + 6 > idx.byteLength) {
+      return false;
+    }
+    const entry = new DataView(idx, group * 6, 6);
+    return (
+      entry.getUint16(0) === 0 &&
+      entry.getUint8(2) === 0 &&
+      entry.getUint16(3) === 0 &&
+      entry.getUint8(5) === 1
+    );
+  }
+  async readStoredMeta(P) {
     try {
       return await this.storage.iC(P);
     } catch (R) {
@@ -893,14 +1031,18 @@ var CacheManager = class {
       return null;
     }
   }
-  async EC(P, Q) {
+  // quiet: behind a running game (hydrate), where no loading screen listens.
+  async storeFiles(P, Q, quiet = false) {
     try {
-      await this.storage.oC(P);
+      await this.storage.deleteCacheMeta(P);
       const S = [...Q.entries()];
       for (let T = 0; T < S.length; T++) {
         const [U, V] = S[T];
-        await this.storage.tC(U, V, P);
+        await this.storage.storeCacheFile(U, V, P);
         const W = Math.round(((T + 1) / S.length) * 100);
+        if (quiet) {
+          continue;
+        }
         this.pC(
           "storing",
           W,
@@ -917,7 +1059,7 @@ var CacheManager = class {
       return false;
     }
   }
-  async LC(P) {
+  async storeMeta(P) {
     const Q = {
       HnRnm: function (T, U) {
         return T ?? U;
@@ -958,7 +1100,7 @@ var CacheManager = class {
       f.warn("Cache", "Could not remove older caches from browser storage:", R);
     }
   }
-  async bC(P) {
+  async extractZip(P) {
     let R;
     try {
       R = await JSZipModule.default.loadAsync(P);
@@ -972,7 +1114,7 @@ var CacheManager = class {
         continue;
       }
       const X = V.split("/").pop() || V;
-      if (!this.DC(X)) {
+      if (!this.isCacheFile(X)) {
         continue;
       }
       const Y = await W.async("arraybuffer");
@@ -983,14 +1125,14 @@ var CacheManager = class {
     }
     return S;
   }
-  DC(P) {
+  isCacheFile(P) {
     return (
       "main_file_cache.dat2" === P ||
       "main_file_cache.dat" === P ||
       P.startsWith("main_file_cache.idx")
     );
   }
-  async MC(P) {
+  async initializeCacheSystem(P) {
     e.start("CacheManager.initializeCacheSystem");
     const R = this.cacheInfo?.builds[0]?.major || 232;
     this.minimapNpcDotUrl = null;
@@ -1008,6 +1150,17 @@ var CacheManager = class {
     this.pC("initializing", 18, "Reading cache index files...");
     e.start("CacheManager.CacheSystem.fromMap");
     this.cacheSystem = B.bm("dat2", P, REQUIRED_CACHE_INDEXES);
+    // Every index reads its groups through this one store.
+    this.store = this.cacheSystem.getIndex(REQUIRED_CACHE_INDEXES[0]).store;
+    // tools/boot-packs.mjs sets this to learn which groups a route reads.
+    const recordedReads = globalThis.__cacheReads;
+    if (recordedReads) {
+      const readGroup = this.store.read.bind(this.store);
+      this.store.read = (index, group) => {
+        recordedReads.add(index + ":" + group);
+        return readGroup(index, group);
+      };
+    }
 
     e.end("CacheManager.CacheSystem.fromMap");
     e.start("CacheManager.MapLoader.init");
@@ -1020,7 +1173,18 @@ var CacheManager = class {
     ]).catch(error => { zebakGroups = undefined; throw error; });
     if (location.pathname.replace(/\/+$/, "") === "/zebak") await prepareZebak();
     const readMap = this.mapLoader.loadMapSquare.bind(this.mapLoader);
+    const startupSquares = new Set();
+    let initializing = true;
     this.mapLoader.loadMapSquare = async (x,y) => {
+      // Started from the lobby's boot pack: a fight is entered with the whole
+      // cache, so every square but the lobby's own waits for it. Those are
+      // the squares the pack lacks, and the one read here at start-up for
+      // the arena bounds (TC), which the pack has and is a fight's.
+      if (initializing) startupSquares.add(x + "," + y);
+      else if (this.hydration && (startupSquares.has(x + "," + y) || this.awaitsWholeCache(5, this.mapLoader.af(x, y)))) {
+        this.beginHydration();
+        await this.hydration;
+      }
       // The nexus (55,80) opens Zebak's setup window, whose portrait needs the model.
       if ((Math.abs(x-61)<=1 && Math.abs(y-84)<=1) || (x===55 && y===80)) await prepareZebak();
       return readMap(x,y);
@@ -1145,16 +1309,17 @@ var CacheManager = class {
       throw new Error("Failed to load TEXTURES index: " + ap);
     }
     this.pC("initializing", 68, "Fetching map encryption keys...");
-    await this.vC();
+    await this.loadXteaKeys();
     this.pC("initializing", 76, "Computing walkable tiles...");
-    await this.TC();
+    await this.analyzeArenaBounds();
     this.pC("initializing", 84, "Loading arena objects and NPCs...");
     if (f.isEnabled(n.DEBUG, "Cache")) {
       await this.kC();
     }
+    initializing = false;
     e.end("CacheManager.initializeCacheSystem");
   }
-  async ud(P, Q, R) {
+  async loadMapLocs(P, Q, R) {
     if (!this.mapLoader) {
       return null;
     }
@@ -1198,7 +1363,7 @@ var CacheManager = class {
               return [];
             }
             const a7 = i(a6, (a8, a9) => W.get(a8 + "," + a9));
-            return ((await this.SC(a4, a5, this.xC(a4, a5))) ?? []).map(
+            return ((await this.loadLocationsWithTypes(a4, a5, this.getXteaKey(a4, a5))) ?? []).map(
               (a8) => ({
                 ...a8,
                 location: {
@@ -1222,7 +1387,7 @@ var CacheManager = class {
       )
     ).flat();
   }
-  async vC() {
+  async loadXteaKeys() {
     e.start("CacheManager.loadXteaKeys");
     if (!this.cacheInfo) {
       e.end("CacheManager.loadXteaKeys");
@@ -1265,9 +1430,9 @@ var CacheManager = class {
           U = true;
         }
       } else {
-        S = await this.XC(Q, R);
+        S = await this.fetchAndCacheXteaKeys(Q, R);
       }
-      this.OC(S);
+      this.parseXteaKeysArray(S);
       if (this.xteaKeys.size === 0 && U) {
         f.warn(
           "Cache",
@@ -1275,8 +1440,8 @@ var CacheManager = class {
         );
         e.start("CacheManager.loadXteaKeys.refetch");
         try {
-          S = await this.XC(Q, R);
-          this.OC(S);
+          S = await this.fetchAndCacheXteaKeys(Q, R);
+          this.parseXteaKeysArray(S);
           f.info(
             "Cache",
             "Re-fetched " + this.xteaKeys.size + " XTEA keys, cache updated",
@@ -1287,7 +1452,7 @@ var CacheManager = class {
         e.end("CacheManager.loadXteaKeys.refetch");
       }
       f.info("Cache", "Loaded " + this.xteaKeys.size + " XTEA keys");
-      const V = this.xC(23, 157);
+      const V = this.getXteaKey(23, 157);
       if (V) {
         f.trace(
           "Cache",
@@ -1300,7 +1465,7 @@ var CacheManager = class {
       f.warn("Cache", "Failed to load XTEA keys:", a0);
     }
   }
-  async XC(P, Q) {
+  async fetchAndCacheXteaKeys(P, Q) {
     let S;
     e.start("CacheManager.loadXteaKeys.fetch");
     try {
@@ -1315,7 +1480,7 @@ var CacheManager = class {
     };
     const buffer2 = new TextEncoder().encode(JSON.stringify(T)).buffer;
     try {
-      await this.storage.tC(Q, buffer2, P);
+      await this.storage.storeCacheFile(Q, buffer2, P);
       f.info("Cache", "Fetched and cached XTEA keys to IndexedDB");
     } catch (V) {
       f.warn(
@@ -1331,7 +1496,7 @@ var CacheManager = class {
       return [];
     }
   }
-  OC(P) {
+  parseXteaKeysArray(P) {
     this.xteaKeys.clear();
     if (Array.isArray(P)) {
       for (const Q of P) {
@@ -1345,14 +1510,14 @@ var CacheManager = class {
       }
     }
   }
-  xC(P, Q) {
+  getXteaKey(P, Q) {
     const S = (P << 8) | Q;
     return this.xteaKeys.get(S);
   }
   async kC() {
     const Q = 23;
     const R = 157;
-    const S = this.xC(Q, R);
+    const S = this.getXteaKey(Q, R);
     f.info("Cache", "Loading Yama Arena contents from map 23_157...");
     if (S) {
       f.debug("Cache", "Using XTEA key for map 23_157");
@@ -1360,7 +1525,7 @@ var CacheManager = class {
       f.warn("Cache", "No XTEA key found for map 23_157");
     }
     try {
-      const T = await this.SC(Q, R, S);
+      const T = await this.loadLocationsWithTypes(Q, R, S);
       if (T && T.length > 0) {
         f.info(
           "Cache",
@@ -1372,7 +1537,7 @@ var CacheManager = class {
           "Yama Arena: No locations found (locs file may need XTEA keys or does not exist)",
         );
       }
-      const U = await this.FC(Q, R, S);
+      const U = await this.loadNpcSpawnsWithTypes(Q, R, S);
       if (U && U.length > 0) {
         f.info("Cache", "Yama Arena NPC Spawns: " + U.length + " NPCs loaded");
         for (const V of U) {
@@ -1399,7 +1564,7 @@ var CacheManager = class {
       f.error("Cache", "Failed to log Yama arena contents:", W);
     }
   }
-  async $C(P) {
+  async readStoredFiles(P) {
     this.pC("loading-from-storage", 2, "Reading cache files...");
     e.start("CacheManager.readStoredFiles");
     const R = [
@@ -1412,7 +1577,7 @@ var CacheManager = class {
     }
     let S;
     try {
-      S = await this.storage.aC(
+      S = await this.storage.getCacheFilesParallel(
         R,
         (U, V) => {
           const W = 2 + Math.round((U / V) * 5);
@@ -1447,56 +1612,56 @@ var CacheManager = class {
   hd() {
     return this.mapLoader;
   }
-  pd() {
+  getUnderlayLoader() {
     return this.underlayLoader;
   }
-  gd() {
+  getOverlayLoader() {
     return this.overlayLoader;
   }
-  kd() {
+  getTextureLoader() {
     return this.textureLoader;
   }
-  IC() {
+  getMinimapNpcDotUrl() {
     return this.minimapNpcDotUrl;
   }
-  PC() {
+  getLocTypeLoader() {
     return this.locTypeLoader;
   }
-  NC() {
+  getNpcTypeLoader() {
     return this.npcTypeLoader;
   }
-  _C() {
+  getSpotAnimTypeLoader() {
     return this.spotAnimTypeLoader;
   }
-  wd() {
+  getLocModelLoader() {
     return this.locModelLoader;
   }
-  yd() {
+  getNpcModelLoader() {
     return this.npcModelLoader;
   }
-  xd() {
+  getPlayerModelLoader() {
     return this.playerModelLoader;
   }
-  bd() {
+  getSpotAnimModelLoader() {
     return this.spotAnimModelLoader;
   }
-  vd() {
+  getAnimationSystem() {
     return this.animationSystem;
   }
   zC() {
     return this.arenaBounds;
   }
-  async rM(P, Q) {
+  async loadAdditionalMapSquare(P, Q) {
     const R = P + "_" + Q;
     const S = this.additionalMapSquares.get(R);
     if (S) {
       return S;
     }
-    const T = this.xC(P, Q);
+    const T = this.getXteaKey(P, Q);
     const [U, V, W] = await Promise.all([
       this.mapLoader ? this.mapLoader.loadMapSquare(P, Q) : null,
-      this.ud(P, Q),
-      this.FC(P, Q, T),
+      this.loadMapLocs(P, Q),
+      this.loadNpcSpawnsWithTypes(P, Q, T),
     ]);
     const X = {
       mapX: P,
@@ -1508,7 +1673,7 @@ var CacheManager = class {
     this.additionalMapSquares.set(R, X);
     return X;
   }
-  RC(P, Q) {
+  getAdditionalMapSquareData(P, Q) {
     return this.additionalMapSquares.get(P + "_" + Q);
   }
   getModelLoader() {
@@ -1517,13 +1682,13 @@ var CacheManager = class {
   getObjTypeLoader() {
     return this.objTypeLoader;
   }
-  KC() {
+  getEnumTypeLoader() {
     return this.enumTypeLoader;
   }
-  BC() {
+  getStructTypeLoader() {
     return this.structTypeLoader;
   }
-  async SC(P, Q, R) {
+  async loadLocationsWithTypes(P, Q, R) {
     if (!this.mapLoader || !this.locTypeLoader) {
       f.warn("Cache", "MapLoader or LocTypeLoader not available");
       return null;
@@ -1563,7 +1728,7 @@ var CacheManager = class {
     }
     return V;
   }
-  async FC(P, Q, R) {
+  async loadNpcSpawnsWithTypes(P, Q, R) {
     if (!this.mapLoader || !this.npcTypeLoader) {
       f.warn("Cache", "MapLoader or NpcTypeLoader not available");
       return null;
@@ -1602,7 +1767,7 @@ var CacheManager = class {
     }
     return V;
   }
-  YC() {
+  getLocCollisionLoader() {
     if (this.locTypeLoader) {
       return (P) => {
         try {
@@ -1619,7 +1784,7 @@ var CacheManager = class {
       };
     }
   }
-  async ld(P) {
+  async buildArenaConfig(P) {
     const Q = {
       PmCHH: function (Z, a0) {
         return Z - a0;
@@ -1698,12 +1863,12 @@ var CacheManager = class {
         e.end("CacheManager.buildArenaConfig");
         return Y;
       }
-      const a0 = this.YC();
+      const a0 = this.getLocCollisionLoader();
       let a1;
       let a2;
       const a3 = t(mapSquareOffsets);
       if (1 === a3.length && a3[0]?.dx === 0 && 0 === a3[0].dy) {
-        const a6 = this.xC(mapX, mapY);
+        const a6 = this.getXteaKey(mapX, mapY);
         const a7 = await this.mapLoader.loadLocations(mapX, mapY, a6);
         const ground = mapX === 61 && mapY === 84
           ? (await import("/toa/zebak/ground.js")).effectiveGround(Z, a7?.locations ?? [])
@@ -1813,7 +1978,7 @@ var CacheManager = class {
               if (!ag) {
                 return null;
               }
-              const ai = await this.mapLoader?.loadLocations(ae, af, this.xC(ae, af));
+              const ai = await this.mapLoader?.loadLocations(ae, af, this.getXteaKey(ae, af));
               return {
                 analysis: K(
                   ag,
@@ -1881,8 +2046,8 @@ var CacheManager = class {
       return Y;
     }
   }
-  async TC(P = 23, Q = 157, R = 32, S = 30) {
-    const U = await this.ld({
+  async analyzeArenaBounds(P = 23, Q = 157, R = 32, S = 30) {
+    const U = await this.buildArenaConfig({
       mapX: P,
       mapY: Q,
       seedX: R,
@@ -1918,7 +2083,7 @@ var CacheManager = class {
     }
     this.error = undefined;
     this.setState("UNLOADED");
-    return this.Ad();
+    return this.ensureCache();
   }
   async getBlob(P) {
     if ("LOADED" !== this.state) {
@@ -1933,7 +2098,7 @@ var CacheManager = class {
     const S = this.cacheInfo?.id || 0;
     return this.storage.nC(S, P, Q);
   }
-  async UC(P, Q, R) {
+  async setParsed(P, Q, R) {
     if (this.state !== "LOADED") {
       throw new Error("Cache not loaded");
     }
@@ -1956,7 +2121,7 @@ var CacheManager = class {
       percent: Q,
       detail: R,
     };
-    this.jC();
+    this.notifyListeners();
   }
   setState(P, Q) {
     this.state = P;
@@ -1969,15 +2134,15 @@ var CacheManager = class {
         status: "idle",
       };
     }
-    this.jC();
+    this.notifyListeners();
   }
-  jC() {
+  notifyListeners() {
     const state2 = this.getState();
     this.listeners.forEach((R) => {
       R(state2);
     });
   }
-  async CC(P, Q = 300000) {
+  async waitForState(P, Q = 300000) {
     if (this.state !== P) {
       return new Promise((S, T) => {
         const U = setTimeout(() => {

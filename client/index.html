@@ -21,44 +21,119 @@
     <link rel="preload" href="/fonts/RuneScape-Bold-12.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="preload" href="/fonts/RuneScape-Quill-8.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="preload" href="/fonts/RuneScape-Small.ttf" as="font" type="font/ttf" crossorigin />
+    <script>
+      // Asks for the game cache while the application script is still on its
+      // way. The manifest always; on a visit without the cache in browser
+      // storage also the lobby's boot pack ("/"), or the whole cache (any
+      // other route: a fight is entered with all of it).
+      // CacheManager (assets/player.js) takes them from window.__cacheBoot.
+      (function () {
+        try {
+          var boot = (window.__cacheBoot = {});
+          var name = (location.pathname.split("/").filter(Boolean)[0] || "lobby").toLowerCase();
+          var get = function (url, cache) {
+            return fetch(url, { cache: cache || "default" }).then(function (response) {
+              if (!response.ok) throw new Error(url + ": HTTP " + response.status);
+              return response;
+            });
+          };
+          // "no-cache": the server is asked whether the manifest is still the
+          // one the browser has, however long it may keep it. An old manifest
+          // names an old cache (test/test-cache-manifest.mjs).
+          boot.manifest = get("/osrs-cache/manifest.json", "no-cache").then(function (response) {
+            return response.json();
+          });
+          // The checksums of the caches CacheDatabase (assets/player.js) keeps.
+          var kept = new Promise(function (resolve) {
+            var open = indexedDB.open("osrs-yama-cache");
+            open.onerror = function () {
+              resolve([]);
+            };
+            open.onsuccess = function () {
+              try {
+                var read = open.result.transaction("meta").objectStore("meta").getAll();
+                read.onsuccess = function () {
+                  resolve(read.result.map(function (meta) { return meta.manifestHash; }));
+                };
+                read.onerror = function () {
+                  resolve([]);
+                };
+              } catch (e) {
+                resolve([]);
+              }
+              open.result.close();
+            };
+          });
+          // CacheManager asks again itself for whatever fails here.
+          boot.pack = Promise.all([boot.manifest, kept]).then(function (both) {
+            var info = both[0];
+            if (!info.diskZipSha256 || both[1].indexOf(info.diskZipSha256) >= 0) return null;
+            var entry = info.bootPacks && info.bootPacks[name];
+            if (entry) {
+              var url = "/osrs-cache/boot/" + name + ".zip?v=" + entry.sha256;
+              return get(url)
+                .then(function (response) {
+                  return response.arrayBuffer();
+                })
+                .then(function (bytes) {
+                  return { url: url, bytes: bytes };
+                });
+            }
+            // The whole cache, counted as it comes in for the loading bar.
+            var whole = (boot.whole = { url: "/osrs-cache/disk.zip?v=" + encodeURIComponent(info.diskZipSha256), loaded: 0, onprogress: null });
+            whole.bytes = get(whole.url).then(function (response) {
+              var reader = response.body.getReader();
+              var chunks = [];
+              var next = function () {
+                return reader.read().then(function (step) {
+                  if (step.done) return new Blob(chunks).arrayBuffer();
+                  chunks.push(step.value);
+                  whole.loaded += step.value.length;
+                  if (whole.onprogress) whole.onprogress();
+                  return next();
+                });
+              };
+              return next();
+            });
+            whole.bytes.catch(function () {});
+            return null;
+          });
+          boot.pack.catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/assets/application.js"></script>
     <link rel="stylesheet" href="/assets/packThemes.css">
     <link rel="stylesheet" href="/assets/Grid.css">
     <link rel="stylesheet" href="/assets/application.css">
-    <title>Community driven OSRS simulator | OpenScim.dev</title>
-    <meta name="description" content="Community driven OSRS simulator." />
-    <meta name="keywords" content="OSRS combat simulator, OSRS simulator, OSRS sim, Old School RuneScape simulator, OSRS PvM simulator, OSRS boss simulator, OSRS boss sim, Yama simulator, Yama sim, OSRS boss practice, OSRS HCIM practice" />
+    <!-- The title, the description, the canonical address and the social tags below are the home page's
+         (client/seo/routes.js). The build writes them again for every route, with the page's structured
+         data and its text inside #root (tools/seo/prerender.mjs); the application keeps them current. -->
+    <title>OSRS Simulator: Practice Bosses in Your Browser | OpenScim.dev</title>
+    <meta name="description" content="Free, community driven OSRS simulator. Practice Old School RuneScape bosses, raids and wave fights in your browser, then take them on for real." />
     <link rel="canonical" href="https://openscim.dev/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="OpenScim.dev" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://openscim.dev/" />
-    <meta property="og:title" content="Community driven OSRS simulator | OpenScim.dev" />
-    <meta property="og:description" content="Community driven OSRS simulator." />
+    <meta property="og:title" content="OSRS Simulator: Practice Bosses in Your Browser | OpenScim.dev" />
+    <meta property="og:description" content="Free, community driven OSRS simulator. Practice Old School RuneScape bosses, raids and wave fights in your browser, then take them on for real." />
     <meta property="og:image" content="https://openscim.dev/assets/openscim-logo/openscim-logo/og-image.png?v=b16c9498" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="OpenScim wordmark" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Community driven OSRS simulator | OpenScim.dev" />
-    <meta name="twitter:description" content="Community driven OSRS simulator." />
+    <meta name="twitter:title" content="OSRS Simulator: Practice Bosses in Your Browser | OpenScim.dev" />
+    <meta name="twitter:description" content="Free, community driven OSRS simulator. Practice Old School RuneScape bosses, raids and wave fights in your browser, then take them on for real." />
     <meta name="twitter:image" content="https://openscim.dev/assets/openscim-logo/openscim-logo/og-image.png?v=b16c9498" />
     <meta name="twitter:image:alt" content="OpenScim wordmark" />
-    <meta name="robots" content="noindex, follow" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"OpenScim.dev","url":"https://openscim.dev","description":"Community driven OSRS simulator.","applicationCategory":"GameApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"browserRequirements":"Requires a modern browser with WebGL 2 support","featureList":["Yama simulator"]}</script>
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"OpenScim.dev","url":"https://openscim.dev","logo":"https://openscim.dev/assets/openscim-logo/openscim-logo/openscim-wordmark.svg"}</script>
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"ItemList","name":"OSRS boss simulators on OpenScim.dev","itemListElement":[{"@type":"ListItem","position":1,"name":"Yama simulator","description":"Practice the Yama Phase 3 fight and its contracts.","url":"https://openscim.dev/yama/"}]}</script>
   </head>
   <body>
-    <noscript>
-      <article style="max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem; font-family: system-ui, sans-serif; color: #f1e8d0; background: #0f0f14;">
-        <nav aria-label="Breadcrumb" style="font-size: 0.875rem; color: #9aa0a6; margin-bottom: 0.75rem;"><span aria-current="page">Home</span></nav>
-        <h1 style="font-size: 2rem; margin: 0 0 1rem 0;">OpenScim.dev: Community driven OSRS simulator</h1>
-        <p style="line-height: 1.6; margin: 0 0 1rem 0;">Practice the hardest fights in Old School RuneScape in your browser. Learn an encounter in sim, drill the mechanics until you are confident, then take it on for real.</p>
-        <p style="font-size: 0.95rem; color: #9aa0a6;">JavaScript is required to run the simulator. Please enable it and reload the page.</p>
-      </article>
-    </noscript>
-    <div id="root"></div>
+    <!-- The loading screen as the application first renders it (LoadingScreen,
+         assets/application.js), so that it is on screen before the application script
+         has arrived. React replaces it with its own on its first render. -->
+    <div id="root"><div class="loading-screen" role="alert" aria-busy="true"><div class="loading-content"><h2 class="loading-title"><img src="/assets/openscim-logo/openscim-logo/openscim-wordmark.svg" alt="OpenScim" width="219" height="48" /></h2><div class="loading-subtitle">Community driven OSRS simulator</div><div class="loading-bar-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Game loading progress"><div class="loading-bar-progress" style="transform: scaleX(0)"></div><div class="loading-percent-display" aria-hidden="true">0%</div></div><div class="loading-text-container"><div class="loading-status-text" aria-live="polite">Initializing...</div></div><div class="loading-tip-container visible"><div class="loading-tip-content"><span class="loading-tip-prefix">Did you know? </span><span class="loading-tip-text">In an encounter, open Practice to switch mechanics on or off. Infinite Health is under Practice aids.</span></div></div></div></div></div>
+    <noscript><p style="font-family: system-ui, sans-serif; color: #f1e8d0; text-align: center;">JavaScript is required to run the simulator. Please enable it and reload the page.</p></noscript>
   </body>
 </html>

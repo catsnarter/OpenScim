@@ -280,6 +280,11 @@ const drainShare = 0.09; // WIKI, OBS (tsps), OBS (k1 222: 3 of 37 Prayer): 9% o
 const poolDamage = [4, 5];
 const ballDamage = [14, 18]; // OBS (tsps); OBS: 17 (n7 39)
 const venom = 1_000_000; // WIKI: the acid envenoms (the engine's poisonVarp for venom)
+// WIKI: "As with all araxytes, Araxxor's attacks can inflict venom." OBS (20
+// kills, with the player no longer immune to venom): each of his 4 melee hits
+// that did damage envenomed him on the tick of the swing, and neither of his 2
+// that hit 0; each of 2 Acidic spits envenomed him on the tick it was spat
+// (here: as it lands). His magic and ranged were never seen then: not yet.
 // WIKI: the Ruptura's blast by distance from it (under it, beside it, 1 and 2
 // tiles between), in proportion to its hitpoints left. On the player (not yet
 // recorded: inferred); on Araxxor, an egg or another araxyte (OBS: 80 on him
@@ -376,12 +381,15 @@ function collisionWithEggs(map, blocked) {
 }
 
 export const patternKey = "araxxorEggs";
+// The colour of the first egg. Each label fits its box in the setup panel; the
+// special each one brings is in the row's info.
 const patternChoices = [
   { value: "random", label: "Any" },
-  { value: "green", label: "Green first (acid ball)" },
-  { value: "white", label: "White first (acid spray)" },
-  { value: "red", label: "Red first (acid drip)" },
+  { value: "green", label: "Green" },
+  { value: "white", label: "White" },
+  { value: "red", label: "Red" },
 ];
+const patternInfo = "The colour of the first egg to hatch, which also chooses his special: green the acid ball, white the acid spray, red the acid drip. Any leaves it to chance. Applies from your next attempt.";
 
 class AraxxorEncounter {
   constructor() {
@@ -672,7 +680,9 @@ class AraxxorEncounter {
       plan: { formulaStyle: "melee_stab", damageType: "melee", attackKind: "melee_stab", maxHit: maxHits.melee, impactDelayTicks: 0, sourceDeathPolicy: "cancel-before-impact" },
     });
     emitInfernoNpcAttack(context, { actor: boss, target: player, clipId: "attack", kind: "araxxor_melee", impactDelayTicks: 0 });
-    return { environmentalDamages: [], npcAttacks: attack ? [{ ...attack, prayerReduction: { type: "reduce", value: prayerLeaves.melee } }] : [] };
+    // The engine envenoms on an accurate hit (inferred: an accurate hit that
+    // prayer brings to 0 envenoms too; the 2 recorded 0s may have missed).
+    return { environmentalDamages: [], npcAttacks: attack ? [{ ...attack, prayerReduction: { type: "reduce", value: prayerLeaves.melee }, applyPoison: venom }] : [] };
   }
   // WIKI: magic or ranged, whichever of the player's defence rolls is lower
   // (inferred: ranged when they are equal).
@@ -1034,7 +1044,7 @@ class AraxxorEncounter {
         projectiles: [this.projectile(projectiles.acidic, middleOf(npc), buildActorVisualTarget(player), end)] });
       npc.combat.lastAttackTick = tick;
       npc.combat.nextActionTick = tick + attackTicks;
-      return { environmentalDamages: [], npcAttacks: attack ? [attack] : [] };
+      return { environmentalDamages: [], npcAttacks: attack ? [{ ...attack, applyPoison: venom }] : [] };
     }
     // The Mirrorback: its bite (a stab, inferred; TABLE max).
     if (!this.mirrorbackBite(npc, context)) return idle;
@@ -1288,6 +1298,10 @@ class AraxxorEncounter {
   getOutcome() {
     return this.outcome;
   }
+  // The replay's auto markers (client/replay/markers.js).
+  getAutoMarkers() {
+    return this.enraged ? [{ id: "enrage", label: "enrage" }] : [];
+  }
   getSnapshot() {
     return {
       kind: this.kind,
@@ -1320,6 +1334,14 @@ export const araxxorDefinition = {
     kind: araxxorKind,
     displayName: "Araxxor",
     description: "The Morytania Spider Cave: his three attack styles, the acid of his specials, nine eggs and their araxytes, and the cleave of his enrage.",
+    // The texts of the page for search engines (client/seo/routes.js).
+    seo: {
+      title: "OSRS Araxxor Simulator",
+      description: "Practice Araxxor in your browser: his three attack styles, the acid of his specials, the eggs and their araxytes, and the cleave of his enrage.",
+      h1: "Araxxor Simulator",
+      intro: "Araxxor is a Slayer boss in OSRS, found in the Morytania Spider Cave. This sim covers his three attack styles, the acid of his specials, the nine eggs and their araxytes, and the cleave of his enrage.",
+      keywords: ["OSRS Araxxor", "Araxxor simulator", "Araxxor practice", "Araxxor eggs", "OSRS Slayer boss simulator"],
+    },
     mapSquare: araxxorMapSquare,
     mapSquareOffsets: araxxorMapSquareOffsets,
     playerStart,
@@ -1336,7 +1358,7 @@ export const araxxorDefinition = {
   },
   controls: {
     defaultMechanicsConfig: { [patternKey]: "random" },
-    mechanicsToggles: [{ key: patternKey, label: "Eggs", setup: true, choices: patternChoices }],
+    mechanicsToggles: [{ key: patternKey, label: "Eggs", setup: true, choices: patternChoices, info: patternInfo }],
     debugActions: [],
   },
 };

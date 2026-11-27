@@ -186,6 +186,7 @@ export const versions = {
   postQuest: {
     tableVersion: "Post-quest", // TABLE
     maxHp: 700, // WIKI, TABLE
+    combatXpBonus: 55, // WIKI, percent; client/data/combatXpBonus.js keeps it too
     enrageHp: 231, // WIKI, OBS: a third
     specialsHp: 570, // WIKI: head, darts and strangle below this
     // WIKI: Strength 270 to 360 and Defence 215 to 145 in step with his lost
@@ -215,6 +216,7 @@ export const versions = {
   awakened: {
     tableVersion: "Awakened", // TABLE: 1400 hitpoints, Attack 420
     maxHp: 1400, // WIKI, TABLE
+    combatXpBonus: 95, // WIKI, percent
     enrageHp: 462, // WIKI: four axes below 462, a third
     specialsHp: 1140, // inferred: the post-quest 570 of 700
     // WIKI: Strength 391 to 522 and Defence 268 to 181. With his +10 strength
@@ -640,6 +642,8 @@ class VardorvisEncounter {
   // --- the rest --------------------------------------------------------
   getEngineRules() {
     return {
+      // The version's combat experience bonus: the NPC id is the same in both.
+      combatXpBonusOverrides: { [ids.boss]: this.version.combatXpBonus },
       onPlayerDamageTaken: (hit) => {
         const boss = this.boss;
         // WIKI: he heals half, rounded down, of what his slashes and specials
@@ -757,10 +761,21 @@ export const vardorvisDefinition = {
     kind: vardorvisKind,
     displayName: "Vardorvis",
     description: "Desert Treasure II. The Stranglewood's ritual site: swinging axes, the head's gaze and darting spikes.",
+    // The texts of the page for search engines (client/seo/routes.js).
+    seo: {
+      title: "OSRS Vardorvis Simulator",
+      description: "Practice Vardorvis from Desert Treasure II in your browser: the swinging axes, the head's gaze and the darting spikes.",
+      h1: "Vardorvis Simulator",
+      intro: "Vardorvis is one of the four Desert Treasure II bosses in OSRS, fought at the ritual site in the Stranglewood. This sim covers his swinging axes, the head's gaze and the darting spikes, so you can drill the fight before doing it for real.",
+      keywords: ["OSRS Vardorvis", "Vardorvis simulator", "Vardorvis practice", "Desert Treasure II bosses", "DT2 boss simulator"],
+    },
     mapSquare: vardorvisMapSquare,
     playerStart,
     loadsMapLocs: true,
     isWorkInProgress: true,
+    // No "3, 2, 1" before the fight: WIKI, he is not aggressive; OBS, his
+    // clock starts with the first hit on him (onPlayerAttackResolved).
+    fightStartCountdown: false,
     collision: { mode: "auto", seed: playerStart },
     victory: { eyebrow: "Triumphant", title: "VICTORY", narrative: "VARDORVIS DEFEATED", accent: "blood" },
     // The awakened fight is a variant kind (client/dt2/bosses.js, awakenedKind); both use the post-quest presets.

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args:["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 try {
   for (const fight of ["zebak","yama"]) {
     const page = await browser.newPage();
@@ -33,7 +31,7 @@ try {
       assert.ok(body.includes(marker));
       await route.fulfill({response,body:body.replace(marker,marker + "window.engine = this;")});
     });
-    await page.goto("http://127.0.0.1:8791/" + fight + "/");
+    await page.goto(process.env.TEST_ORIGIN + "/" + fight + "/");
     const orb = page.locator('canvas[aria-label="Special Attack"]');
     await orb.first().waitFor();
     await page.locator('.loading-screen').waitFor({state:'hidden'});

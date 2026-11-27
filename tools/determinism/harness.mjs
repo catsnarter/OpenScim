@@ -30,9 +30,9 @@
 // player, and the cache loader beyond items and arenas.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { register } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { installHooks } from "./node-hooks.mjs";
 
 export const digestDirectory = "test/determinism-digests";
 export const cacheZip = "client/osrs-cache/disk.zip";
@@ -44,7 +44,7 @@ const cacheManifest = "client/osrs-cache/manifest.json";
 let environment;
 export function loadEnvironment() {
   return (environment ??= (async () => {
-    register("./node-hooks.mjs", import.meta.url);
+    installHooks();
     globalThis.self ??= globalThis; // PicoGL reads `self` when it loads
     globalThis.location ??= { pathname: "/" }; // the cache loader reads the route
     // The Zebak modules fetch their map groups by web-root path.
@@ -65,7 +65,7 @@ export function loadEnvironment() {
     const warn = console.warn;
     console.warn = () => {}; // one sprite needs a canvas; the loader warns and carries on
     try {
-      await cacheManager.MC(await cacheManager.bC(zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength)));
+      await cacheManager.initializeCacheSystem(await cacheManager.extractZip(zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength)));
     } finally {
       console.warn = warn;
     }
@@ -81,7 +81,7 @@ export function loadEnvironment() {
       if (arenaDescriptors.has(descriptor.kind) && arenaDescriptors.get(descriptor.kind) !== descriptor) arenas.delete(descriptor.kind);
       if (arenas.has(descriptor.kind) || (descriptor.collision?.mode ?? "auto") === "custom") return;
       const seed = descriptor.collision?.seed ?? descriptor.playerStart;
-      const arena = await cacheManager.ld({
+      const arena = await cacheManager.buildArenaConfig({
         mapX: descriptor.mapSquare.x,
         mapY: descriptor.mapSquare.y,
         seedX: seed[0],
@@ -97,7 +97,7 @@ export function loadEnvironment() {
       rendering.registerArenaConfig(descriptor.kind, arena);
     }
     // getEncounterControls: the controls of an encounter kind (mechanics toggles, debug actions), as the menus read them.
-    return { engineModule, objTypeLoader: cacheManager.getObjTypeLoader(), prepareArena, registry, controlsOf: rendering.getEncounterControls, rendering };
+    return { engineModule, objTypeLoader: cacheManager.getObjTypeLoader(), npcTypeLoader: cacheManager.getNpcTypeLoader(), prepareArena, registry, controlsOf: rendering.getEncounterControls, rendering };
   })());
 }
 
@@ -197,8 +197,11 @@ const inventoryOf = (ids = []) => Array.from({ length: 28 }, (_, slot) => (ids[s
 /**
  * Runs one scenario. Returns { digests, final, ticks, outcome, unseeded,
  * rebuilt } and calls onTick(tick, engine, text) after every tick.
+ * onRecorded({ recording, frames, engine, rebuild, skip }) is handed the
+ * recording of the run (of the last one, where it restarts) when it is over;
+ * rebuild(index) is the replay's rebuild at one of its frames.
  */
-export async function runScenario(scenario, { onTick, wantText } = {}) {
+export async function runScenario(scenario, { onTick, onRecorded, wantText } = {}) {
   const { engineModule, objTypeLoader, prepareArena, registry, controlsOf, rendering } = await loadEnvironment();
   if (scenario.pure) {
     // Not a fight: the value of a function of the engine chunk's exports (and of the encounter registry, the controls,
@@ -357,6 +360,7 @@ export async function runScenario(scenario, { onTick, wantText } = {}) {
       for (const action of frames[index].actions) rebuiltEngine.injectAction(action);
       rebuiltEngine.advanceTick(frames[index].input);
     }
+    onRecorded?.({ recording, frames, engine, skip, rebuild: (index) => engineModule.rebuildEngineAtReplayFrame(recording, frames, index, objTypeLoader) });
     const digests = texts.map(sha256);
     return {
       digests,

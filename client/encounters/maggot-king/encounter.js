@@ -78,6 +78,12 @@ const finalHp = 305;
 const fillHp = 299;
 const spitMaxHit = 46; // WIKI
 const spitTicks = 2; // OBS 15 kills: the hit lands 2 ticks after the spit (324 of 324; the projectile flies from 45 to 60 cycles)
+// WIKI (Maggot King/Strategies): the ranged spit "will also poison the player
+// starting at 8 damage": 40 on the engine's scale (ceil(40 / 5) = 8). OBS (a
+// player's own fights, 2026-11-26): it poisons through Protect from Missiles
+// too, unless the player is immune; the engine poisons on an accurate hit. The
+// 15 recorded kills cannot show it: every player was immune.
+const spitPoison = 40;
 const bileTicks = 3; // OBS 15 kills: the bile lies 3 ticks after the spit lands (324 of 324; its drops fall 90 cycles)
 // His Defence is halved (TABLE "Roaring") from 3 to 8 ticks into a screech
 // (inferred: the time the player's protection prayer was down in the first 23).
@@ -193,8 +199,23 @@ class MaggotKingEncounter {
     this.incoming = []; // what will land where: { kind: "bile" | "slam" | "pile" | "fragment", tiles, landsAt }
     this.punish = null;
     this.lastTargetId = null;
+    this.begun = false; // he has had his first turn (an attack or a screech)
+    this.wentFar = true; // a far rotation has been fought: the next far one takes the other style
     this.floor.reset();
     this.larvae.reset();
+  }
+  // The rotation he opens with. In the game he opens far, at full hitpoints.
+  // Hitpoints set before his first turn (the practice panel's "Boss health",
+  // during the countdown) open the run in the phase they call for, as after
+  // a screech at them (inferred: no recording starts below full): near below
+  // meleeHp, near for good below finalHp, the first far rotation ranged.
+  openAt(hp) {
+    if (this.begun) return;
+    const near = hp <= meleeHp;
+    this.phase = near ? "melee" : "distant";
+    this.movement = near ? "near" : "far";
+    this.final = hp <= finalHp;
+    this.wentFar = !near;
   }
   randomInt(low, high) {
     return low + Math.floor(this.random() * (high - low + 1));
@@ -234,6 +255,11 @@ class MaggotKingEncounter {
     boss.position = [...bossStart];
     boss.previousPosition = [...bossStart];
     boss.formulaStats = structuredClone(versions.Far);
+    this.openAt(boss.vitals.hp); // a setting changed during the countdown keeps the hitpoints set before it
+  }
+  // The practice panel set his hitpoints (SimulationEngine.setBossHp).
+  syncBossHp(hp) {
+    this.openAt(hp);
   }
   createNpcs() {
     const hp = getMonsterHitpoints(npcTypeIds.king); // TABLE: 1500
@@ -342,6 +368,7 @@ class MaggotKingEncounter {
     const result = { environmentalDamages: [], npcAttacks: [] };
     const player = context.world.getPlayer();
     if (!boss.alive || !player.alive || this.phase === "dead" || context.tick < this.nextAt) return result;
+    this.begun = true;
     if (this.attacksLeft <= 0) {
       this.screech(boss, context);
       return result;
@@ -384,7 +411,7 @@ class MaggotKingEncounter {
     boss.facing = boss.lockedFacing ?? 0; // the helper turns him to the player
     const tile = [...player.position];
     this.later(spitTicks, (ctx) => this.splash(ctx, tile, style === "range" ? "poison" : "sticky", spotAnimId));
-    return attack;
+    return style === "range" ? { ...attack, applyPoison: spitPoison } : attack;
   }
   // OBS: the tile and two of its eight neighbours on the floor, at random.
   splash(context, tile, bile, spotAnimId) {
@@ -444,7 +471,10 @@ class MaggotKingEncounter {
     const fill = !this.filled && hp <= fillHp;
     if (fill) this.filled = true;
     // OBS 15 kills: the far rotations take turns, ranged first, then magic and ranged, whatever near ones come between (59 of 59).
-    if (next === "distant") this.style = this.style === "range" ? "magic" : "range";
+    if (next === "distant") {
+      if (this.wentFar) this.style = this.style === "range" ? "magic" : "range";
+      this.wentFar = true;
+    }
     this.screechAt = tick;
     this.phase = next;
     this.speed = next === "melee" ? slamSpeed : distantSpeed;
@@ -537,17 +567,26 @@ class MaggotKingEncounter {
     return this.slam !== null && this.slam.landsAt === tick;
   }
   // A larva in the air shot with standard ranged (a bow: WIKI, "standard
-  // ranged"; OBS: the player switched to a bow for them) dies at once and costs
-  // the weapon no time (WIKI): it may be shot while the weapon cools down, the
-  // timer kept, unless it was what was attacked last (as the Doom of
-  // Mokhaiotl's larvae). A punish costs a melee weapon no time either.
+  // ranged"; OBS: the player switched to a bow for them) dies at once. It may
+  // be shot while the weapon cools down, unless it was what was attacked last,
+  // and the shot starts the weapon's delay again from its tick: larvae can be
+  // shot a tick apart, and the King waits out the delay of the last one.
+  // WIKI (Strategies): the shot "will incur its normal attack cooldown and
+  // will completely overwrite the cooldown of the previous attack". OBS, a
+  // second player's 5 kills, 17 larvae shot in the air with a bow of
+  // Faerdhinen on rapid (4 ticks), two of them while it cooled down (a tick
+  // after a shot at the King; a tick after another larva of a fill): the next
+  // attack on the King came 4 or more ticks after the larva (17 of 17), 4
+  // after the second of the fill's two. (The larva's own page says the hit
+  // costs no delay: the recordings say otherwise.) A punish costs a melee
+  // weapon no time.
   shootsLarva(target, tick, style, weaponId) {
     return this.larvae.isLarva(target) && this.larvae.flying(target, tick) && style === "ranged" && getRangedDefenceType(weaponId) === "standard";
   }
   attackOnCooldown(target, tick) {
     const player = this.world?.getPlayer();
     const style = playerFormulaStyle(player);
-    if (target.id !== this.lastTargetId && this.shootsLarva(target, tick, style, player?.equipment?.weapon)) return { keepCooldown: true };
+    if (target.id !== this.lastTargetId && this.shootsLarva(target, tick, style, player?.equipment?.weapon)) return { keepCooldown: false };
     if (this.isPunish(target, tick)) return { keepCooldown: true };
     return undefined;
   }
@@ -643,6 +682,14 @@ export const maggotKingDefinition = {
     kind: maggotKingKind,
     displayName: "Maggot King",
     description: "Vampyrium. Ranged and magic spits around screeches, bile and carrion on the floor, larvae that eat it, and head slams once he comes close.",
+    // The texts of the page for search engines (client/seo/routes.js).
+    seo: {
+      title: "OSRS Maggot King Simulator",
+      description: "Practice the Maggot King in your browser: his ranged and magic spits and screeches, the bile and carrion on the floor, the larvae and his head slams.",
+      h1: "Maggot King Simulator",
+      intro: "The Maggot King is a boss in OSRS, found in Vampyrium. This sim covers his ranged and magic spits around the screeches, the bile and carrion on the floor, the larvae that eat it, and the head slams once he comes close.",
+      keywords: ["OSRS Maggot King", "Maggot King simulator", "Maggot King practice", "Vampyrium boss"],
+    },
     mapSquare: maggotKingMapSquare,
     playerStart,
     loadsMapLocs: true,

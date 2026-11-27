@@ -18,6 +18,9 @@ export const totemCharge = 200;
 const totemMessages = {
   full: (name) => `The ${name} totem is fully charged.`,
   all: { text: "All four totems are fully charged.", color: "#ff3045" },
+  // OBS (Outside, four recordings of the Nightmare's group fight, Vaerric, 2026-11-27): a charged totem keeps its
+  // "Charge" option (the cache's 9445 and 9442 have it); clicked, this message on that tick and no attack (2 of 2).
+  already: "That totem is already charged.",
 }; // tsps, as captured
 
 // --- husks -----------------------------------------------------------------
@@ -44,7 +47,9 @@ export const huskMessages = {
 // tsps: her animation; 2 ticks later it flies at the player; 3 after that it
 // takes hold. 20 ticks later it bursts out (21 if weakened, 84 of 84
 // captured): 56 to 80 fully grown, 4 to 9 if a Sanfew serum or Relicym's
-// balm weakened it first (tsps; WIKI: "massive" damage). It acts 6 ticks after
+// balm weakened it first (tsps; WIKI: "massive" damage). OBS (Outside, five
+// recordings): 21 ticks every time it was weakened (7 of 7), and those bursts
+// hit 9, 5, 6, 10, 9, 7 and 9: at least 10 weakened, so 4 to 10 here. It acts 6 ticks after
 // it is out, then every 4: 31 to 50 back on her shield, or as much from the
 // least charged totem, or else an attack on the player, ranged first, 12 at
 // most (10 weakened), which the right protection stops. WIKI: weakened, 55
@@ -53,11 +58,13 @@ export const huskMessages = {
 const parasiteFlightTicks = 2;
 const infectTicks = 5; // from her animation
 const burstTicks = { full: 20, weak: 21 };
-const burstDamage = { full: [56, 80], weak: [4, 9] };
+const burstDamage = { full: [56, 80], weak: [4, 10] }; // tsps; OBS (Outside): the weakened top
 const parasiteFirst = 6;
 const parasiteEvery = 4;
 const parasiteHeal = [31, 50];
 const parasiteMaxHit = { full: 12, weak: 10 };
+// OBS (Outside): its projectiles start at 84 (magic 1771, drain 1773, heal 1774) and 40 (ranged 1775) in the game's
+// height units, a quarter of that here (21 and 10); its magic's impact (1772) shows at 104. Their timing is tsps's.
 // Sanfew serum(4) to (1) and Relicym's balm(4) to (1).
 export const parasiteCures = new Set([10925, 10927, 10929, 10931, 4842, 4844, 4846, 4848]);
 export const parasiteMessages = {
@@ -78,26 +85,34 @@ export const parasiteMessages = {
 // kills one; the blast does 5, and 144 more shared out over those that reached
 // her (OBS (runelogs): 5 with none taken in, 41 with one of four, 53 with
 // one of three).
+// OBS (Outside, one kill): they rose 2 ticks after her blast form, and walked
+// from their fourth tick after her first two phases but their seventh after
+// her last. OBS (Outside, five recordings of 2026-11-25 and 26, 15 blasts): her
+// blast animation 2 ticks after the last one's death in 12 (3 in the other 3),
+// and 2 after the last was taken in (1 of 1, tsps: 3). The rule that it came an
+// even number of ticks after they rose, from the first recording, holds for 7.
 //
 // Her desperation (WIKI, tsps): one at a time, each that reaches her a hit of
-// 15. OBS (runelogs, the 4 kills that lasted that long): the player clicks the
-// first 9 ticks after her desperation form and its hit lands 19 ticks in, the
-// next ones 8 apart (WIKI, tsps); so it rises 9 ticks in (tsps: 2), and the 6
-// steps from any of the eight tiles take it to her 10 ticks after it rose.
+// 15, the next ones 8 apart. OBS (Outside): the first rises 2 ticks after her
+// desperation form (tsps: 2), walks from its seventh tick, and is taken in a
+// tick after it is beside her; its hit lands 4 ticks after that, 19 ticks after
+// her form (OBS (runelogs, the 4 kills that lasted that long): 19 too). OBS
+// (Outside, five recordings): every one of its hits on the player 15 (6 of 6).
 export const sleepwalkerCounts = [2, 3, 4];
 const riseTicks = 2;
-const walkAfter = 4;
+const walkAfter = { early: 4, last: 7 };
 const latestBlast = 16;
 const absorbGoneTicks = 2;
-const blastAfterAbsorb = 3;
-const blastAfterDeath = 1;
+const blastAfterAbsorb = 2;
+const blastAfterDeath = 2;
 const blastImpactTicks = 4;
 const blastHitTicks = 2;
 const nextFormTicks = 9;
 const blastDamage = (absorbed, spawned) => 5 + Math.floor((144 * absorbed) / Math.max(1, spawned));
-const desperationFirst = 9;
+const desperationFirst = 2;
 const desperationEvery = 8;
 const desperationDamage = 15;
+const desperationHitTicks = 4;
 export const walkerMessages = {
   charging: { text: "The Nightmare begins to charge up a devastating attack.", color: "#ff3045" },
   restores: { text: "The Nightmare restores her shield.", color: "#ff3045" },
@@ -166,7 +181,7 @@ export class Minions {
     if (!totem) return;
     const spec = totemSpecs[index];
     totem.npcTypeId = npcTypeIds.totems[spec.corner][["dormant", "ready", "charged"].indexOf(stage)];
-    totem.untargetable = stage !== "ready";
+    totem.untargetable = stage === "dormant";
     if (stage !== "charged") totem.vitals = { hp: totemCharge, maxHp: totemCharge };
   }
   wakeTotems(world) {
@@ -198,12 +213,32 @@ export class Minions {
   }
   totemFull(context, index) {
     this.setTotem(context.world, index, "charged");
+    // OBS (Outside, the four group and five Phosani recordings): the player charging it stops as it is charged, without
+    // the message (his target gone the next tick 30 times of 30, 13 of them with no click on that tick or the next).
+    const player = context.world.getPlayer();
+    if (player.attackTarget === this.totemId(index)) {
+      player.attackTarget = null;
+      player.attackInteractionActive = false;
+    }
     if (this.charged.every(Boolean)) {
       this.e.message(context, totemMessages.all);
       this.e.totemsCharged(context);
     } else {
       this.e.message(context, totemMessages.full(totemSpecs[index].name));
     }
+  }
+  // A click on a charged totem (the player's target is read before this, so a target on one now is a click of this
+  // tick): the message, and the totem blocked for this tick alone, which drops the target before he moves or attacks
+  // (as Hydra's form change does).
+  refuseCharged(context) {
+    const player = context.world.getPlayer();
+    totemSpecs.forEach((_, index) => {
+      if (!this.charged[index]) return;
+      const totem = context.world.getNpc(this.totemId(index));
+      if (!totem || totem.untargetable) return;
+      totem.attackBlockedUntilTick = context.tick + 1;
+      if (player.attackTarget === totem.id) this.e.message(context, totemMessages.already);
+    });
   }
   leastCharged() {
     let best = -1;
@@ -295,7 +330,6 @@ export class Minions {
       animations: [{ actorId: husk.id, clipId: style }],
       projectiles: [this.e.projectileFrom(husk, player, projectile)],
       graphics: style === "magic" ? [{ spotAnimId: spotAnims.huskMagicImpact, target: this.e.playerTarget(player), height: 104, delayCycles: 67 }] : [],
-      sounds: [{ id: sounds.huskAttack, range: 6, position: [...husk.position] }],
     });
     return { environmentalDamages: [], npcAttacks: attack ? [attack] : [] };
   }
@@ -376,7 +410,7 @@ export class Minions {
     const amount = parasiteHeal[0] + Math.floor(e.random() * (parasiteHeal[1] - parasiteHeal[0] + 1));
     if (boss && e.stage === "shield" && e.shield < e.shieldMax) {
       faceActorToward(parasite, boss);
-      e.visual(context, { animations: [{ actorId: parasite.id, clipId: "cast" }], projectiles: [e.projectileFrom(parasite, boss, { spotAnimId: spotAnims.parasiteHeal, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 26, endHeight: 26 })] });
+      e.visual(context, { animations: [{ actorId: parasite.id, clipId: "cast" }], projectiles: [e.projectileFrom(parasite, boss, { spotAnimId: spotAnims.parasiteHeal, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 21, endHeight: 26 })] });
       e.later(2, () => e.healShield(amount));
       return idle;
     }
@@ -385,7 +419,7 @@ export class Minions {
       const target = context.world.getNpc(this.totemId(totem));
       if (target) {
         faceActorToward(parasite, target);
-        e.visual(context, { animations: [{ actorId: parasite.id, clipId: "cast" }], projectiles: [e.projectileFrom(parasite, target, { spotAnimId: spotAnims.parasiteDrain, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 26, endHeight: 26 })] });
+        e.visual(context, { animations: [{ actorId: parasite.id, clipId: "cast" }], projectiles: [e.projectileFrom(parasite, target, { spotAnimId: spotAnims.parasiteDrain, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 21, endHeight: 26 })] });
         e.later(2, (ctx) => this.drainTotem(ctx.world, totem, amount));
         return idle;
       }
@@ -403,12 +437,12 @@ export class Minions {
       },
     });
     const projectile = style === "magic"
-      ? { spotAnimId: spotAnims.parasiteMagic, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 26, endHeight: 26 }
-      : { spotAnimId: spotAnims.parasiteRange, start: 35, end: 60, slope: 0, startOffset: 20, startHeight: 26, endHeight: 26 };
+      ? { spotAnimId: spotAnims.parasiteMagic, start: 35, end: 60, slope: 2, startOffset: 32, startHeight: 21, endHeight: 26 }
+      : { spotAnimId: spotAnims.parasiteRange, start: 35, end: 60, slope: 0, startOffset: 20, startHeight: 10, endHeight: 26 };
     e.visual(context, {
       animations: [{ actorId: parasite.id, clipId: style === "magic" ? "cast" : "range" }],
       projectiles: [e.projectileFrom(parasite, player, projectile)],
-      graphics: style === "magic" ? [{ spotAnimId: spotAnims.parasiteMagicImpact, target: e.playerTarget(player), height: 100, delayCycles: 60 }] : [],
+      graphics: style === "magic" ? [{ spotAnimId: spotAnims.parasiteMagicImpact, target: e.playerTarget(player), height: 104, delayCycles: 60 }] : [],
     });
     return { environmentalDamages: [], npcAttacks: attack ? [attack] : [] };
   }
@@ -434,6 +468,7 @@ export class Minions {
       }
       for (let n = 0; n < count; n++) if (this.rise(ctx, tiles[n % tiles.length], false)) state.spawned++;
       state.risen = true;
+      state.risenAt = ctx.tick;
       state.readyAt = ctx.tick + 1;
       e.later(latestBlast, (late) => {
         if (e.epoch !== epoch || this.walk !== state || state.blasted) return;
@@ -447,7 +482,8 @@ export class Minions {
   rise(context, tile, desperate) {
     const id = `nightmare-sleepwalker-${this.count++}`;
     const hp = getMonsterHitpoints(npcTypeIds.sleepwalker); // TABLE: 10
-    const walker = sleepwalkerDefinition.createActor({ ...baseActor(id, npcTypeIds.sleepwalker, tile, 1, hp), blocksNpcMovement: false }, { walkAt: context.tick + walkAfter, desperate, absorbed: false });
+    const late = desperate || this.e.phase >= sleepwalkerCounts.length;
+    const walker = sleepwalkerDefinition.createActor({ ...baseActor(id, npcTypeIds.sleepwalker, tile, 1, hp), blocksNpcMovement: false }, { walkAt: context.tick + (late ? walkAfter.last : walkAfter.early), desperate, absorbed: false });
     context.spawnNpc(walker);
     this.walkers.add(id);
     this.e.visual(context, { animations: [{ actorId: id, clipId: "rise" }] });
@@ -485,7 +521,10 @@ export class Minions {
     walker.untargetable = true;
     this.gone(context, walker.id, blastAfterAbsorb);
     e.visual(context, { animations: [{ actorId: walker.id, clipId: "absorb" }] });
-    if (walker.state.desperate) e.hurt({ baseDamage: desperationDamage, attackType: "typeless", source: "Sleepwalker" });
+    if (walker.state.desperate) {
+      const epoch = e.epoch;
+      e.later(desperationHitTicks, () => e.epoch === epoch && e.hurt({ baseDamage: desperationDamage, attackType: "typeless", source: "Sleepwalker" }));
+    }
     else if (this.walk) this.walk.absorbed++;
     e.later(absorbGoneTicks, (ctx) => ctx.world.getNpc(walker.id) && ctx.despawnNpc(walker.id));
   }

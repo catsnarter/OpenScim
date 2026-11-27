@@ -278,6 +278,14 @@ export function zebakDefinition({
     getOutcome() {
       return this.outcome;
     }
+    // The replay's auto markers (client/replay/markers.js): each of his specials, and the enrage.
+    getAutoMarkers() {
+      const { active, enraged } = this.phases;
+      return [
+        ...(active ? [{ id: `${active.kind} ${active.start}`, label: active.kind === "roar" ? "Great Roar" : "Tidal Waves" }] : []),
+        ...(enraged ? [{ id: "enrage", label: "enrage" }] : []),
+      ];
+    }
     getSnapshot() {
       return { kind: this.kind, state: {
         ...this.phases.snapshot(), bloodTrail: [...this.bloodTrail.values()].map(mark => mark.position),
@@ -620,6 +628,15 @@ export function zebakDefinition({
       kind: "zebak",
       displayName: "Zebak",
       description: "Tombs of Amascut",
+      // The texts of the page for search engines (client/seo/routes.js).
+      seo: {
+        summary: "Practice Zebak, the boss of the Path of Crondis in the Tombs of Amascut.",
+        title: "OSRS Zebak Simulator",
+        description: "Practice Zebak, the crocodile boss of the Tombs of Amascut, in your browser. Set the path level and the invocations of his fight before you start.",
+        h1: "Zebak Simulator",
+        intro: "Zebak is the boss of the Path of Crondis in the Tombs of Amascut, the OSRS raid. This sim covers his room, with the path level and the invocations of his fight to set before you start.",
+        keywords: ["OSRS Zebak", "Zebak simulator", "Zebak practice", "Tombs of Amascut simulator", "ToA simulator", "Path of Crondis"],
+      },
       playerStart: start,
       mapSquare,
       loadsMapLocs: true,
@@ -652,7 +669,7 @@ export function zebakDefinition({
         },
         {
           key: "other",
-          label: "Other raid points",
+          label: "Invocation level",
           setup: true,
           choices: [
             0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600,

@@ -24,6 +24,24 @@ import {
   applyOnHitSpecialEffects,
   isDamageIndependentSpecialEffect,
 } from "./specialAttacks.js";
+import { getWeaponCategoryDefinition } from "../data/weaponCategories.js";
+import { mitigateRondacheHit } from "./rondache.js";
+// The attack animation and graphic of a player's attack that has its own: the attack's (the Ascension crossbows'
+// left and right shots, launch.js), else its weapon style's (the Obligator's Thrust and Smash, weaponCategories.js).
+// None for a special attack, whose animation is the special's, nor for a spell, whose animation and graphics are
+// the spell's (#132: a spell cast holding the Obligator on Thrust took the Thrust's chain).
+function getPlayerAttackStyle(attacker, attack) {
+  if (attacker.kind !== "player" || attack.usingSpecialAttack || attack.spellId !== undefined || attack.weaponId === undefined) {
+    return undefined;
+  }
+  return getWeaponCategoryDefinition(attack.weaponId).styles[attacker.selectedAttackStyleIndex ?? 0];
+}
+function getStyleAttackAnimationId(attacker, attack) {
+  return attack.attackAnimationId ?? getPlayerAttackStyle(attacker, attack)?.attackAnimationId;
+}
+function getStyleAttackGraphicId(attacker, attack) {
+  return getPlayerAttackStyle(attacker, attack)?.attackGraphicIdByWeaponId?.[attack.weaponId];
+}
 var NO_LAUNCH_DAMAGE_MULTIPLIERS = {
   incomingDamageMultiplier: undefined,
   outgoingDamageMultiplier: undefined,
@@ -319,6 +337,10 @@ var CombatSystem = class {
         weaponId: attack.weaponId,
         ammoId: attack.ammoId,
         ammoSource: attack.ammoSource,
+        ...(attack.specialAttackItemId === undefined ? {} : { specialAttackItemId: attack.specialAttackItemId }),
+        ...(getStyleAttackAnimationId(attacker, attack) === undefined ? {} : { attackAnimationId: getStyleAttackAnimationId(attacker, attack) }),
+        ...(getStyleAttackGraphicId(attacker, attack) === undefined ? {} : { attackGraphicId: getStyleAttackGraphicId(attacker, attack) }),
+        ...(attack.hitGraphicId === undefined ? {} : { hitGraphicId: attack.hitGraphicId }),
         ...(attack.ricochets === undefined
           ? {}
           : {
@@ -326,6 +348,17 @@ var CombatSystem = class {
             }),
       };
       combatContext.events.emit(attackStartedEvent);
+      // An enchanted bolt's effect shows on the target as the bolt is fired,
+      // two to three ticks before it lands (OBS: ruby and diamond bolts in
+      // recorded Nex kills, the graphic on the shot's tick).
+      if (attack.procSpotAnimId !== undefined && attack.accuracySucceeded && this.isNpc(target)) {
+        combatContext.events.emit({
+          type: "npc_graphic_applied",
+          targetId: target.id,
+          spotAnimId: attack.procSpotAnimId,
+          height: 0,
+        });
+      }
       combatContext.onAttackStarted?.();
     } else if ("player" === attacker.kind && undefined !== attack.spellId) {
       const spellTargetedEvent = {
@@ -381,7 +414,6 @@ var CombatSystem = class {
         postHitEffects: attack.postHitEffects,
         expectedHit: attack.expectedHit,
         sourceSelfDamageRatio: attack.sourceSelfDamageRatio,
-        ...(attack.procSpotAnimId === undefined ? {} : { procSpotAnimId: attack.procSpotAnimId }),
         launchDamageMultipliers: {
           incomingDamageMultiplier: hitContext.incomingDamageMultiplier,
           outgoingDamageMultiplier: combatContext.outgoingDamageMultiplier,
@@ -514,7 +546,6 @@ var CombatSystem = class {
                 postHitEffects: pendingHit.postHitEffects,
                 expectedHit: pendingHit.expectedHit,
                 sourceSelfDamageRatio: pendingHit.sourceSelfDamageRatio,
-                procSpotAnimId: pendingHit.procSpotAnimId,
                 equipmentHitEffects: pendingHit.equipmentHitEffects,
                 prayerCheckAt: pendingHit.prayerCheckAt,
                 weaponId: pendingHit.weaponId,
@@ -738,6 +769,9 @@ var CombatSystem = class {
         onKillEffect: resolvedAttack.onKillEffect,
         postHitEffects: resolvedAttack.postHitEffects,
         weaponId: resolvedAttack.weaponId,
+        ...(resolvedAttack.specialAttackItemId === undefined ? {} : { specialAttackItemId: resolvedAttack.specialAttackItemId }),
+        ...(resolvedAttack.attackAnimationId === undefined ? {} : { attackAnimationId: resolvedAttack.attackAnimationId }),
+        ...(resolvedAttack.hitGraphicId === undefined ? {} : { hitGraphicId: resolvedAttack.hitGraphicId }),
         ...(resolvedAttack.protectedByNpcPrayer === undefined ? {} : { protectedByNpcPrayer: resolvedAttack.protectedByNpcPrayer }),
         ammoId: resolvedAttack.ammoId,
         ammoSource: resolvedAttack.ammoSource,
@@ -825,15 +859,6 @@ var CombatSystem = class {
         attack.hitsplatType ?? (appliedDamage.effectiveDamage > 0 ? "damage" : "block"),
     };
     combatContext.events.emit(hitsplatEvent);
-    // An enchanted bolt's effect shows on the target as the bolt lands.
-    if (attack.procSpotAnimId !== undefined && attack.accuracySucceeded && this.isNpc(target)) {
-      combatContext.events.emit({
-        type: "npc_graphic_applied",
-        targetId: target.id,
-        spotAnimId: attack.procSpotAnimId,
-        height: 0,
-      });
-    }
     combatContext.onDamageApplied?.(appliedDamage);
     if (
       appliedDamage.effectiveDamage > 0 &&
@@ -1053,7 +1078,10 @@ var CombatSystem = class {
           ? Math.floor(cappedDamage * 0.75)
           : cappedDamage
         : cappedDamage;
-    const effectiveDamage = this.isNpc(target) ? Math.min(shieldReducedDamage, Math.max(0, hpBefore)) : shieldReducedDamage;
+    // The Rondache's flat armour, and the charges it gives (rondache.js).
+    const rondacheReducedDamage =
+      this.isNpc(attacker) && this.isPlayer(target) && attackType !== "typeless" ? mitigateRondacheHit(target, shieldReducedDamage, tick) : shieldReducedDamage;
+    const effectiveDamage = this.isNpc(target) ? Math.min(rondacheReducedDamage, Math.max(0, hpBefore)) : rondacheReducedDamage;
     const targetHasInfiniteHealth = combatContext.infiniteHealth && "player" === target.kind;
     if (!targetHasInfiniteHealth && this.isPlayer(target)) {
       clearPowerOfDeathIfWeaponRemoved(target, effectiveDamage);

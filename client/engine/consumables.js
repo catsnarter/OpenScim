@@ -42,6 +42,11 @@ function createFourDosePotionEntries(doseItemIds, createEffects) {
   };
 }
 var extraPotionConsumables = {
+  ...createDosedConsumableEntries([23885, 23884, 23883, 23882], 229, "potion", 3, () => [ // CACHE: Egniol potion doses; WIKI: restores prayer and run energy, with stamina
+    { op: "restore_prayer_formula", formula: "prayer_potion" },
+    { op: "restore_run", amount: 4000 },
+    { op: "apply_timed_effect", effectType: "stamina", durationTicks: 200 },
+  ]),
   ...createFourDosePotionEntries([22461, 22464, 22467, 22470], () => [
     {
       op: "boost_formula",
@@ -428,6 +433,67 @@ var consumableDefinitionByItemId = {
     {
       op: "cure_poison",
       immunityTicks: 1200,
+    },
+  ]),
+  // The anti-venoms cure venom outright and keep it off while the poison
+  // value is below -38 (SimulationEngine.js, VENOM_IMMUNITY_THRESHOLD).
+  // WIKI (Poison, Venom): 12.3 minutes of poison immunity (41 pulses), and 36
+  // to 54 seconds of venom immunity.
+  ...createSteppedDoseConsumableEntries(12905, 2, 229, "potion", 3, () => [ // Anti-venom(4)
+    {
+      op: "cure_poison",
+      immunityTicks: 1230,
+      curesVenom: true,
+    },
+  ]),
+  // WIKI: 15 minutes of poison immunity (50 pulses), 216 seconds of venom immunity.
+  ...createSteppedDoseConsumableEntries(12913, 2, 229, "potion", 3, () => [ // Anti-venom+(4)
+    {
+      op: "cure_poison",
+      immunityTicks: 1500,
+      curesVenom: true,
+    },
+  ]),
+  // OBS (Araxxor, 4 kills): a dose sets the poison value to -59; WIKI: 17.7
+  // minutes of poison immunity, 378 seconds of venom immunity.
+  ...createSteppedDoseConsumableEntries(29824, 3, 229, "potion", 3, () => [ // Extended anti-venom+(4)
+    {
+      op: "cure_poison",
+      immunityTicks: 1770,
+      curesVenom: true,
+    },
+  ]),
+  // Antifire potions (WIKI: Antifire potion, Extended antifire, Super antifire
+  // potion, Extended super antifire): protection from dragonfire for a time,
+  // as a timed effect a fight reads (getDragonfireProtection). WIKI: 6 and 12
+  // minutes of antifire, 3 and 6 of super antifire. Item ids: the game's (the
+  // wiki's item list); the antifires step by 2, the super antifires by 3.
+  ...createSteppedDoseConsumableEntries(2452, 2, 229, "potion", 3, () => [ // Antifire potion(4)
+    {
+      op: "apply_timed_effect",
+      effectType: "antifire",
+      durationTicks: 600,
+    },
+  ]),
+  ...createSteppedDoseConsumableEntries(11951, 2, 229, "potion", 3, () => [ // Extended antifire(4)
+    {
+      op: "apply_timed_effect",
+      effectType: "antifire",
+      durationTicks: 1200,
+    },
+  ]),
+  ...createSteppedDoseConsumableEntries(21978, 3, 229, "potion", 3, () => [ // Super antifire potion(4)
+    {
+      op: "apply_timed_effect",
+      effectType: "super_antifire",
+      durationTicks: 300,
+    },
+  ]),
+  ...createSteppedDoseConsumableEntries(22209, 3, 229, "potion", 3, () => [ // Extended super antifire(4)
+    {
+      op: "apply_timed_effect",
+      effectType: "super_antifire",
+      durationTicks: 600,
     },
   ]),
   ...createSteppedDoseConsumableEntries(31638, 3, 229, "potion", 3, () => [ // Extended stamina potion(4)
@@ -922,18 +988,18 @@ function applyConsumableEffect(effect, playerState, effectModifiers) {
         },
       };
     case "cure_poison":
-      return applyCurePoison(
-        playerState.poisonState.poisonVarp >= VENOM_VARP_BASE
-          ? {
-              ...playerState,
-              poisonState: {
-                ...playerState.poisonState,
-                poisonVarp: venomVarpToPoisonVarp(playerState.poisonState.poisonVarp),
-              },
-            }
-          : playerState,
-        effect.immunityTicks,
-      );
+      // WIKI (Venom): any antipoison turns venom into poison that starts at
+      // the venom's damage; a second dose cures it. An anti-venom cures it.
+      if (playerState.poisonState.poisonVarp >= VENOM_VARP_BASE && !effect.curesVenom) {
+        return {
+          ...playerState,
+          poisonState: {
+            ...playerState.poisonState,
+            poisonVarp: venomVarpToPoisonVarp(playerState.poisonState.poisonVarp),
+          },
+        };
+      }
+      return applyCurePoison(playerState, effect.immunityTicks);
     case "reduce_poison":
       return applyReducePoison(playerState, effect.amount);
     case "saturated_heart":
@@ -986,7 +1052,16 @@ function applyConsumableEffects(effects, playerState, effectModifiers) {
   }
   return syncHitpointsStat(newState);
 }
+// The dragonfire protection the player's potions give now: "super" (a super
+// antifire), "antifire" or "none". A super antifire and an antifire can both
+// run; the super's is what counts (WIKI: dragonfire).
+function getDragonfireProtection(activeEffects) {
+  if (activeEffects?.some((effect) => effect.type === "super_antifire")) return "super";
+  if (activeEffects?.some((effect) => effect.type === "antifire")) return "antifire";
+  return "none";
+}
 export {
+  getDragonfireProtection,
   ATTACK_DELAY_TICKS_BY_CONSUMABLE_TRACK,
   consumableDefinitionByItemId,
   getConsumableDefinition,

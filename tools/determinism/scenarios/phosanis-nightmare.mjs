@@ -5,7 +5,8 @@
 // snapshot tells what a player watches for: the stage and the shield, her
 // melee coming, the claws' tiles, the flowers, the spores, the surge, the
 // husks' trance, the parasite and the totems' charge. Each script decides
-// from it and the tick alone.
+// from it and the tick alone. She sleeps as the run starts and takes her
+// first form on tick 27 (encounter.js, wakeTimes).
 import { attack, boss, equip, item, meleeGear, protect, use } from "./common.mjs";
 import { floorTiles, gapTo, isTotemTile, chebyshev, same, bossSize } from "../../../client/encounters/phosanis-nightmare/ids.js";
 
@@ -16,6 +17,7 @@ const prayers = { magic: "ProtectMagic", range: "ProtectRange", melee: "ProtectM
 const sanfews = [10925, 10927, 10929, 10931];
 
 const state = (api) => api.engine.getEncounterSnapshot().state;
+const awake = 28; // the tick after she takes her first form
 const has = (tiles, tile) => tiles.some((other) => same(other, tile));
 
 // Inquisitor's, the guide's melee set (loadouts.js), with Tumeken's shadow for the totems, sanfew serums and food.
@@ -121,9 +123,16 @@ function fight(tick, api) {
   // In her desperation a sleepwalker costs 15: he keeps on her.
   const walker = s.stage === "desperate" ? null : pick((npc) => npc.id.startsWith("nightmare-sleepwalker") && !npc.untargetable);
   const parasite = pick((npc) => npc.id.startsWith("nightmare-parasite"));
-  const totem = s.stage === "totems" ? pick((npc) => npc.id.startsWith("nightmare-totem") && !npc.untargetable) : null;
+  // A charged totem keeps its option (clicked, it refuses): the ones still to charge.
+  const charged = (npc) => s.totems.some((totem) => npc.id === "nightmare-totem-" + totem.corner && totem.charged);
+  const totem = s.stage === "totems" ? pick((npc) => npc.id.startsWith("nightmare-totem") && !npc.untargetable && !charged(npc)) : null;
   const target = husk ?? walker ?? parasite ?? totem ?? (s.stage === "shield" || s.stage === "desperate" ? boss(api) : null);
   if (target && me.attackTarget !== target.id) attack(api, target.id);
+}
+
+// Standing where he starts, the player attacks her whenever her shield is up and he is not at it.
+function hitShield(tick, api) {
+  if (state(api).stage === "shield" && api.player().attackTarget !== BOSS) attack(api, BOSS);
 }
 
 export const scenarios = [
@@ -151,17 +160,58 @@ export const scenarios = [
     script: fight,
   },
   {
+    // The fight as in "kill", but on the tick after each "... totem is fully charged." the player clicks a charged
+    // totem: it refuses, with the game's message, and he attacks nothing that tick.
+    name: "phosanis-nightmare/charged-totem",
+    kind: KIND,
+    seed: 11,
+    ticks: 400,
+    mechanics: health,
+    ...gear,
+    script(tick, api) {
+      const s = state(api);
+      const justCharged = api.engine.getLastTickEvents().some((event) => event.type === "game_message" && event.segments.some(({ text }) => text.endsWith("totem is fully charged.")));
+      const full = s.totems.find((totem) => totem.charged);
+      if (s.stage === "totems" && justCharged && full) {
+        attack(api, "nightmare-totem-" + full.corner);
+        return;
+      }
+      fight(tick, api);
+    },
+  },
+  {
     // The player stands where he starts, attacks her and prays nothing: her
     // standard attacks, her specials in their order, the claws and her surge as they come.
     name: "phosanis-nightmare/standing",
     kind: KIND,
-    seed: 5,
-    ticks: 260,
+    seed: 46,
+    ticks: 300,
     mechanics: health,
     ...gear,
     script(tick, api) {
-      if (tick === 1) attack(api, BOSS);
+      if (tick === awake) attack(api, BOSS);
     },
+  },
+  {
+    // The player stands, attacks her while her shield is up and prays nothing; his hit breaks it on the tick she
+    // lands at her surge's lane (131 her leave, 133 the landing), which nulls the surge (Don Danz's recording).
+    name: "phosanis-nightmare/surge-nulled",
+    kind: KIND,
+    seed: 718,
+    ticks: 160,
+    mechanics: health,
+    ...gear,
+    script: hitShield,
+  },
+  {
+    // The same, his hit breaking her shield on the tick she crosses (131 her leave, 137 the crossing): she crosses.
+    name: "phosanis-nightmare/surge-crosses",
+    kind: KIND,
+    seed: 296,
+    ticks: 160,
+    mechanics: health,
+    ...gear,
+    script: hitShield,
   },
   {
     // Her 9418 form first (parasite, flowers, curse): the player stands, attacks her and drinks nothing, so her
@@ -169,11 +219,11 @@ export const scenarios = [
     name: "phosanis-nightmare/parasite",
     kind: KIND,
     seed: 6,
-    ticks: 300,
+    ticks: 330,
     mechanics: health,
     ...gear,
     script(tick, api) {
-      if (tick === 1) attack(api, BOSS);
+      if (tick === awake) attack(api, BOSS);
     },
   },
   {
@@ -182,7 +232,7 @@ export const scenarios = [
     name: "phosanis-nightmare/spores",
     kind: KIND,
     seed: 5,
-    ticks: 300,
+    ticks: 330,
     mechanics: health,
     ...gear,
     script(tick, api) {
@@ -195,7 +245,7 @@ export const scenarios = [
         api.moveTo(...beside);
         return;
       }
-      if (me.attackTarget !== BOSS && !s.away) attack(api, BOSS);
+      if (me.attackTarget !== BOSS && !s.away && s.stage !== "asleep") attack(api, BOSS);
     },
   },
   {

@@ -2564,6 +2564,35 @@ button.info-hint:before {
   line-height: 1.2;
   display: flex;
 }
+.mechanics-color-group-title {
+  color: var(--color-secondary);
+  flex-basis: 100%;
+  font-family: "RuneScape Bold 12", sans-serif;
+  font-size: 14px;
+  line-height: 18px;
+  margin: 2px 0 0 6px;
+}
+.mechanics-color-setting {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 32px;
+  width: 100%;
+  padding-left: 6px;
+}
+.mechanics-color-setting > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mechanics-color-setting input[type="color"] {
+  box-sizing: border-box;
+  cursor: pointer;
+  flex: 0 0 42px;
+  height: 28px;
+  margin-left: 8px;
+  padding: 2px;
+  width: 42px;
+}
 .mechanics-choice-segmented {
   padding: calc(2px + var(--border-give, 0px));
   background: var(--color-surface-inset);
@@ -3017,6 +3046,19 @@ html:not([data-panel-dragging])
   top: 0;
   left: 0;
 }
+/* An encounter's tint over the scene (Grid.js, state.screenTint), fading in from nothing. */
+@keyframes encounter-screen-tint-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* A shield, shown in place of the hitpoints (Grid.js, BossHealthBarOverlay): the blue of the shield bar over the NPC. */
+.boss-hp__fill--shield {
+  background-color: #2b8fd6;
+}
 @media (prefers-reduced-motion: reduce) {
   .boss-hp__fill {
     transition: none;
@@ -3058,6 +3100,11 @@ html:not([data-panel-dragging])
   flex: 1 1 0;
   min-width: 0;
 }
+/* A player's name and text, each in a bidi isolate: neither reorders the other or the ": " (lobby chat). */
+.chatbox__speaker,
+.chatbox__said {
+  unicode-bidi: isolate;
+}
 .chatbox__scrollbar {
   position: absolute;
 }
@@ -3084,6 +3131,28 @@ html:not([data-panel-dragging])
   font-family: "RuneScape Plain 12", sans-serif;
   display: flex;
   position: absolute;
+}
+/* The lobby's public chat input line (Grid.js LobbyChatInput): the text as drawn, a real input under it. */
+.chatbox__typing {
+  white-space: pre;
+  display: inline-flex;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.chatbox__typing-line {
+  flex: none;
+}
+.chatbox__field {
+  pointer-events: auto;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
 }
 .chatbox__tab,
 .chatbox__report {

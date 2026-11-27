@@ -4,12 +4,10 @@
 // scene plays. The encounter turns those into the default scene's.
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const origin = "http://127.0.0.1:8791";
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const origin = process.env.TEST_ORIGIN;
+const browser = await chromium.launch(browserOptions);
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 850 } });
@@ -32,7 +30,7 @@ try {
   await page.waitForFunction(() => window.engine && window.scene, null, { timeout: 60000 });
   await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 60000 });
   assert.equal(new URL(page.url()).pathname, "/colosseum/");
-  await page.waitForFunction(() => document.title === "Fortis Colosseum | OpenScim.dev");
+  await page.waitForFunction(() => document.title === "OSRS Fortis Colosseum Simulator | OpenScim.dev");
   assert.equal(await page.evaluate(() => engine.getEncounterKind()), "colosseum");
 
   // The scene has loaded the model of every NPC type a wave can place so far.

@@ -2,12 +2,10 @@
 // sequences from the trimmed cache, an attack of his drawn, and the win.
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const origin = "http://127.0.0.1:8791";
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const origin = process.env.TEST_ORIGIN;
+const browser = await chromium.launch(browserOptions);
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 850 } });
@@ -30,7 +28,7 @@ try {
   await page.goto(origin + "/doom-of-mokhaiotl/");
   await page.waitForFunction(() => window.engine && window.scene, null, { timeout: 60000 });
   await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 60000 });
-  await page.waitForFunction(() => document.title === "Doom of Mokhaiotl | OpenScim.dev");
+  await page.waitForFunction(() => document.title === "OSRS Doom of Mokhaiotl Simulator (Beta) | OpenScim.dev");
   await page.waitForFunction(() => scene.isTerrainLoaded() && scene.isPlayerLoaded() && scene.isNpcLoaded() && scene.isNpcTypeLoaded(14707), null, { timeout: 60000 });
   assert.deepEqual(await page.evaluate(() => engine.worldState.actors.get("doom").vitals), { hp: 525, maxHp: 525 });
 
@@ -66,8 +64,19 @@ try {
     }),
     ["2", { x: 53, y: 100 }, false, true],
   );
+
+  // Another delve chosen in the set-up is the one Restart fights, and the
+  // chat says which: delve 4, his 600 hitpoints (TABLE).
+  await page.getByRole("button", { name: "Practice" }).click();
+  await page.getByRole("radiogroup", { name: "Delve" }).getByRole("radio").nth(2).click(); // 2, 3, 4
+  await page.getByRole("button", { name: "Restart fight" }).click();
+  await page.waitForFunction(
+    () => engine.encounter.rules.delve === 4 && engine.worldState.actors.get("doom").vitals.maxHp === 600 && document.body.innerText.includes("Delve level: 4"),
+    null,
+    { timeout: 30000 },
+  );
   assert.deepEqual(errors, []);
-  console.log("The Doom of Mokhaiotl loaded on /doom-of-mokhaiotl/, attacked, and was won; delves 2-8 load their own room");
+  console.log("The Doom of Mokhaiotl loaded on /doom-of-mokhaiotl/, attacked, and was won; delves 2-8 load their own room, and a restart names the delve chosen");
 } finally {
   await browser.close();
 }

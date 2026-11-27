@@ -16,10 +16,11 @@ it still has short machine names. See `ROADMAP.md` for the plan.
 
 ## Run
 
-Requires Node 22+ and, for the tests, Chrome.
+Requires Node 22+.
 
 ```sh
 npm install
+npx playwright-core install chromium-headless-shell   # the browser of the tests, once
 npm run assets       # game cache and media from public sources (about 230 MB download, once)
 npm run dev          # http://127.0.0.1:5173/
 ```
@@ -30,6 +31,12 @@ The lobby's Desert Treasure II gate opens a chooser for its four bosses: Vardorv
 The waves of the Fortis Colosseum are at `/colosseum/`, the Doom of Mokhaiotl at `/doom-of-mokhaiotl/`, Araxxor at `/araxxor/`, the Alchemical Hydra at `/alchemical-hydra/`.
 
 `npm run build` writes a static site to `dist/`; `npm run preview` serves it.
+For search engines the build writes a page for every route
+(`dist/vardorvis/index.html`: the route's own title, description and text,
+from `client/seo/routes.js`) and `sitemap.xml`. A host must answer `/vardorvis/`
+with that page and an address that has no file with `dist/index.html`. Only a
+page served from openscim.dev asks to be indexed: any other host says
+"noindex" (`client/seo/site.js`).
 
 Game media is not in this repository. `npm run assets` downloads the game
 cache from OpenRS2, decodes the interface sprites it holds, and fetches the
@@ -52,11 +59,21 @@ load to a black screen.
 ## Test
 
 ```sh
-npm test                                  # everything, one file at a time (about 7 minutes)
+npm test                                  # everything, several files at a time (about 2 minutes)
 npm test -- test/test-zebak-tide.mjs      # a single script
+npm test -- "test/test-zebak*.mjs"        # those that match
+npm test -- --changed                     # while working on a fight: skips the other fights' browser tests
 ```
 
-`npm test` starts its own server on port 8791.
+`npm test` starts its own servers (up to four, without source maps) on the
+first free ports from 8791 up, and gives each test the address of one as
+`TEST_ORIGIN`. Runs in several worktrees go
+side by side: they share the machine's processors through one pool of slots,
+half its processors unless `OPENSCIM_TEST_SLOTS` says otherwise, and a file
+that fails is run once more on its own before it counts as failed. `--changed`
+runs everything unless the branch has changed nothing but fights' own files
+(`tools/run-tests.mjs` says which); the run before a pull request is the whole
+one.
 
 `test/test-sound-synth.mjs` compares the sound synthesizer with the 392
 recordings the project used to ship. They are not in the repository; set
@@ -64,7 +81,10 @@ recordings the project used to ship. They are not in the repository; set
 `OpenScim-assets-backup.zip` next to the repository). Without them that
 comparison is skipped.
 
-Set `CHROME_PATH` if Chrome is not in `C:/Program Files/Google/Chrome/Application/`.
+The tests run in Playwright's headless shell (`tools/browser.mjs`). Set
+`CHROME_PATH` to run them in another browser. Not in an installed Chrome on
+Windows: each start of it fails one logon of your Windows account, and a run of
+the tests is enough of them to lock the account for ten minutes.
 
 ## Layout
 
@@ -77,6 +97,7 @@ Set `CHROME_PATH` if Chrome is not in `C:/Program Files/Google/Chrome/Applicatio
 | `client/encounters/` | The encounters, one directory each: `lobby/`, `yama/`, `sol-heredit/` and `inferno/`, the original ones, moved out of `assets/rendering.js` and cleaned (their scenes are still in the chunk); `colosseum/`, `doom-of-mokhaiotl/`, `vardorvis/` and `leviathan/`, written for this project as modules. Beside them `shared/` for what several of them use (NPC definitions, NPC attack rolls, pursuit, the route search, the default scene builder), and `registry.js`, which finds every encounter by the `encounter.js` of its directory (its kind, the factory of its encounter object, its descriptor, its controls) and holds the registry the engine asks for the encounter of a kind, and `presentations.js`, which finds what draws the encounters that are written in modules the same way. `tombs-of-amascut/` only registers the fights of `client/toa/`. No module here imports a chunk. A new encounter is a directory here, with no list and no chunk to edit: `docs/ADDING-AN-ENCOUNTER.md`. `docs/ARCHITECTURE.md` lists the modules and the rule their imports follow. |
 | `client/toa/` | Tombs of Amascut, written for this project: the lobby gateway (`gateway.js`), the nexus room (`nexus.js`), their shader (`shader.js`). |
 | `client/toa/zebak/` | Zebak encounter modules (written for this project). |
+| `client/replay/` | The replay's undo and markers (`markers.js`): the keys that rewind a running fight, mark its ticks and go back to them. Its tick log (`tickLog.js`, `tickLogPanel.js`): the list beside an open replay of what happened on each tick, which follows the playhead and goes to a tick on a click; and the strip over the replay's slider (`traceStrip.js`) that draws the fight from it, tick by tick. The replay's recorder and player are in `assets/Grid.js`, its rebuild in `client/engine/replay.js`. |
 | `client/lobby/` | What the lobby's gateways share (`gateway.js`) and the list of them (`gateways.js`). |
 | `client/dt2/` | Desert Treasure II: the lobby gateway (`gateway.js`), its shader (`shader.js`), the four bosses (`bosses.js`) and their chooser (`chooser.js`). |
 | `client/audio/` | Sound-effect synthesizer (written for this project). |

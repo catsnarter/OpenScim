@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 import {soloZebakHitpoints, zebakAutoMaxHit} from "../client/toa/zebak/rules.js";
+import {zebakDefinition} from "../client/toa/zebak/native.js";
 
 // Published solo observations in the Wiki DPS calculator's TombsOfAmascut.test.ts
 // and the path 4, raid 145 HUD in https://youtu.be/mwKeq1tP05Y?t=545.
@@ -16,10 +18,12 @@ for (const [raid, path, melee, projectile] of [
   assert.equal(zebakAutoMaxHit(false, raid, path), projectile);
 }
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+// The practice menu names the raid level chosen beside the invocations' own toggles "Invocation level".
+const raidChoice = zebakDefinition({seedRandom: () => () => 0.5, walkable: () => new Set(), animate() {}})
+  .controls.mechanicsToggles.find(toggle => toggle.key === "other");
+assert.equal(raidChoice.label, "Invocation level");
+
+const browser = await chromium.launch(browserOptions);
 try {
   const page = await browser.newPage();
   const errors = [];
@@ -37,7 +41,7 @@ try {
       await route.fulfill({response, body: body.replace(marker, marker + probe)});
     });
   }
-  await page.goto("http://127.0.0.1:8791/zebak/");
+  await page.goto(process.env.TEST_ORIGIN + "/zebak/");
   await page.waitForFunction(() => document.body.innerText.includes("580/580"));
   const result = await page.evaluate(() => {
     const actor = engine.worldState.actors.get("zebak");

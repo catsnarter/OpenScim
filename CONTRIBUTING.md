@@ -6,12 +6,13 @@ agree your work is released under the same terms.
 
 ## Setup
 
-Requires Node 22+ and, for the tests, Chrome.
+Requires Node 22+.
 
 ```sh
 git clone https://github.com/realkadera/OpenScim.git
 cd OpenScim
 npm install
+npx playwright-core install chromium-headless-shell   # the browser of the tests, once
 npm run assets   # game cache and media, about 230 MB, once
 npm run dev      # http://127.0.0.1:5173/
 ```
@@ -68,7 +69,7 @@ issue instead.
 node tools/determinism/harness.mjs   # every scenario "ok"
 node tools/check-import-graph.mjs    # exit 0
 node tools/check-test-markers.mjs    # 0 lost
-npm test                             # all files pass, about 7 minutes
+npm test                             # all files pass, about 2 minutes
 npm run build
 ```
 

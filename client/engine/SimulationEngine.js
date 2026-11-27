@@ -9,13 +9,15 @@ import {
   getWeaponFormulaStyle,
 } from "./weapons.js";
 import { spotAnimIds } from "../data/spotAnimIds.js";
+import { expireZoryasFlow } from "./zoryasFlow.js";
+import { tickRondache, isWearingRondache, getRondacheCharges } from "./rondache.js";
 import {
   getWeaponCategoryOrUnarmed,
   getDefaultAttackStyleIndex,
   getActiveSpell,
   getWeaponCategoryDefinition,
 } from "../data/weaponCategories.js";
-import { hasSpecialAttack } from "../data/specialAttackDefinitions.js";
+import { getEquippedSpecialAttackItemId } from "../data/specialAttackDefinitions.js";
 import {
   ringOfEnduranceItemId,
   createCombatTimers,
@@ -185,6 +187,14 @@ var softBodyNameKeywords = [
   "d'hide",
 ];
 var VENOM_VARP_THRESHOLD = 1000000;
+// OBS (Araxxor, 20 kills): an anti-venom's immunity counts up from -59 by one
+// a pulse; at -39 "Your venom resistance is about to wear off.", at -38 "Your
+// venom resistance has worn off, but you are still resistant to poison.", and
+// in each of the 6 kills where it wore off before the end, an attack
+// envenomed the player at -38 to -36, within 7 ticks. WIKI (Venom): an
+// antidote++ keeps venom off for 18 to 36 seconds and an anti-venom+ for 216:
+// their values (-40 and -50) up to -39.
+var VENOM_IMMUNITY_THRESHOLD = -38;
 function decaySoulreaperStacks(soulreaper, tick) {
   if (undefined === soulreaper || tick < soulreaper.decayTick) {
     return soulreaper;
@@ -533,8 +543,9 @@ function addItemToInventory(inventory, itemId, quantity, stackable) {
   }
 }
 // The player's poison is one number, poisonState.poisonVarp. 0: none. Below
-// 0: immune, counting up to 0 by one a pulse. From 1: poison, with the damage
-// getPoisonDamage gives, one less a pulse. From 1,000,000
+// 0: immune to poison, counting up to 0 by one a pulse; below -38
+// (VENOM_IMMUNITY_THRESHOLD) immune to venom too. From 1: poison, with the
+// damage getPoisonDamage gives, one less a pulse. From 1,000,000
 // (VENOM_VARP_THRESHOLD): venom, one more a pulse, dealing 6, 8, ... up to 20.
 // tickPoison allows a pulse when poisonTickCounter has run down and sets it
 // to 30 again.
@@ -682,6 +693,9 @@ function buildEngineState(worldState, engine) {
         ...(npc.overheadPrayers?.length ? { overheadPrayers: [...npc.overheadPrayers] } : {}),
         // The colour of the NPC's name in the right-click menu, when its encounter sets one (Grid.js, npcMenuColor).
         ...(npc.menuColor ? { menuColor: npc.menuColor } : {}),
+        // Set by its encounter: hovered, the NPC shows its first option even without "Attack" (Grid.js,
+        // npcHoverShowsOption), as the game shows "Push Jug" over Zebak's jugs.
+        ...(npc.hoverShowsOption ? { hoverShowsOption: true } : {}),
         ...(npc.chargeBar ? { chargeBar: { ...npc.chargeBar } } : {}),
         ...(npc.shieldBar ? { shieldBar: { ...npc.shieldBar } } : {}),
         ...(npc.alwaysShowHealthBar
@@ -760,6 +774,8 @@ function buildEngineState(worldState, engine) {
       : {
           soulreaperStacks: player.soulreaper.stacks,
         }),
+    // The Rondache's charges, for the bar under the special attack orb (rondache.js).
+    ...(isWearingRondache(player) ? { rondacheCharges: getRondacheCharges(player) } : {}),
     combatTimers: player.combatTimers,
     inventory: player.inventory,
     groundItems: worldState.groundItems.map((groundItem) => ({
@@ -1679,7 +1695,9 @@ var SimulationEngine = class {
   //     (runPlayerUpkeep).
   //  6. A target that can no longer be attacked is dropped. A ground item
   //     the player had ordered picked up is taken if he stands on its
-  //     tile. The player steps, unless his input is locked: toward his
+  //     tile. The player steps, unless his input is locked or the rule
+  //     playerMovementLocked holds him (a freeze: he keeps his target and
+  //     attacks what he can reach, and eats and prays): toward his
   //     target NPC while it is out of range or he stands under it, and
   //     without a target toward targetTile; the encounter may move him
   //     instead (moveDisplacedPlayer). Then he attacks if he can
@@ -1763,7 +1781,9 @@ var SimulationEngine = class {
     const attackTargetActor = player.attackTarget
       ? this.worldState.actors.get(player.attackTarget)
       : undefined;
-    if (inputLocked) {
+    // Optional; read here, after the NPCs, so that a freeze landed this tick holds this tick's step.
+    const movementLocked = resolveValueOrCallback(encounterRules?.playerMovementLocked, this.buildRulesContext()) === true;
+    if (inputLocked || movementLocked) {
       playerStep = {
         position: [...player.position],
         stepTiles: [],
@@ -1839,6 +1859,10 @@ var SimulationEngine = class {
       tickEvents: this.tickEvents,
     });
     player.soulreaper = decaySoulreaperStacks(player.soulreaper, tick);
+    tickRondache(player, tick);
+    if (player.zoryasFlow !== undefined) {
+      player.zoryasFlow = expireZoryasFlow(player.zoryasFlow, tick);
+    }
     const postTickContext = this.buildTickContext(tick, player.position, inputs, npcMovements, setProtectionPrayer);
     for (const postTickDamage of this.encounter.processPostTick(postTickContext, mechanics)) {
       this.applyEnvironmentalDamage(postTickDamage, tick);
@@ -2898,7 +2922,7 @@ var SimulationEngine = class {
               };
               break;
             }
-            if (undefined !== loadout.equipment.weapon && hasSpecialAttack(loadout.equipment.weapon)) {
+            if (getEquippedSpecialAttackItemId(loadout.equipment) !== undefined) {
               specialAttackActive = !specialAttackActive;
             }
             break;
@@ -3188,7 +3212,7 @@ var SimulationEngine = class {
           ) {
             break;
           }
-          if (player.equipment.weapon !== undefined && hasSpecialAttack(player.equipment.weapon)) {
+          if (getEquippedSpecialAttackItemId(player.equipment) !== undefined) {
             player.isSpecialAttackActive = !player.isSpecialAttackActive;
           }
           break;
@@ -4586,10 +4610,20 @@ var SimulationEngine = class {
       },
     };
   }
+  // `poisonSeverity` is the poisonVarp it brings: a poison's severity, or
+  // VENOM_VARP_THRESHOLD for venom. Venom takes the place of poison; nothing
+  // takes the place of venom. An antipoison's immunity keeps poison off, not
+  // venom (OBS: see VENOM_IMMUNITY_THRESHOLD). On a player who is immune, the
+  // pulses go on where they were (OBS, Araxxor: envenomed at -37, the first
+  // venom hit came 6 ticks later, on the immunity's 30-tick beat).
   applyPoisonToPlayer(poisonSeverity) {
     const player = this.player();
     const poisonVarp = player.poisonState.poisonVarp;
-    if (poisonVarp < 0 || poisonVarp >= VENOM_VARP_THRESHOLD) {
+    if (poisonVarp >= VENOM_VARP_THRESHOLD) {
+      return;
+    }
+    const immuneBelow = poisonSeverity >= VENOM_VARP_THRESHOLD ? VENOM_IMMUNITY_THRESHOLD : 0;
+    if (poisonVarp < immuneBelow) {
       return;
     }
     const wasUnpoisoned = poisonVarp === 0;

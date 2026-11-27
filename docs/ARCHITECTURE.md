@@ -23,8 +23,9 @@ Names in `code font` are the names in the code today, short ones included.
 | `client/util/` | 246 | What every layer uses and is neither a rule of the game nor game data: the logger and the colour packing. Two modules that import nothing. See "Utilities" below. |
 | `client/assets/simulationEngineFactory.js` | 50 | Re-exports `client/engine/` for the chunks that import the engine from here. |
 | `client/assets/rendering.js` | 63,990 | Misnamed: cache decoding and the renderer, the tables of the scenes (weapon animations, projectiles), the encounters' scenes and their presentations. See "rendering.js" below. |
-| `client/assets/Grid.js` | 55,965 | React components, and the hook that owns the engine and runs the tick loop (`mse`), the replay recorder and player. |
-| `client/assets/application.js` | 54,723 | The React application: routes, settings, the encounter manager hook (`qwe`, log tag `useEncounterManager`). |
+| `client/assets/Grid.js` | 55,965 | React components (`Grid`, `GamePanel`, `ReplayControls`, `TopChrome`…), the hook that wires the engine and the tick loop to the interface (`useSimulationWiring`), the replay hook and recorder (`useReplay`, `ReplayRecorder`) and the persisted settings (`usePersistedSettings`). |
+| `client/assets/application.js` | 54,723 | The React application (`AppShell`): routes (`useRouting`), settings, the Plugins panel (`PluginsPanelContent`), the encounter manager hook (`useEncounterManager`). |
+| `client/replay/` | 1,084 | What the replay adds to a running fight, `markers.js`: undo, the markers and the keys of both, without the DOM but for a line of text. The recorder and the player are in `assets/Grid.js` (`ReplayRecorder`, `useReplay`), which call it; the rebuild is `engine/replay.js`. A change to how a recording is kept, cut or restored has to keep the markers right: each holds its own copy of a recording (`copyRun`, `restoreRun`) and is restored as Take Over restores a tick. Beside an open replay, its tick log: `tickLog.js` says what happened on each tick from what a frame already keeps (its events, the player's actions, the state after the tick), without the DOM; `tickLogPanel.js` lists it, follows the playhead and moves it on a click. `traceStrip.js` draws it over the replay's slider, each tick where the slider has it (damage done above a line, damage taken below, specials, switches and deaths), and moves the playhead on a click or a drag. The replay's bar mounts both (`Grid.js`, `ReplayTickLog`, `ReplayTrace`). An event of a new kind is not listed until `describeFrame` names it. |
 | `client/encounters/shared/` | 1,169 | What the encounters share and the engine itself does not need: the NPC definition framework, NPC attack rolls, the default pursuit, the route search, the default scene builder. Six modules. See "Shared rules" below. |
 | `client/encounters/registry.js` | 212 | The encounter definitions (for each encounter its kind, the factory of its encounter object, its descriptor and its controls), found in the `encounter.js` of every directory beside it; the lookups over them, and `encounterRegistry`, which the engine asks for the encounter of a kind. Moved out of `rendering.js` and cleaned. See "The encounters" below. |
 | `client/encounters/presentations.js` | 57 | What draws an encounter, for the encounters written in modules: `presentationBuilders`, the functions found in the `presentation.js` of every encounter's directory, which `rendering.js` calls with its base scene class. See "Engine and encounter" below and `docs/ADDING-AN-ENCOUNTER.md`. |
@@ -306,16 +307,33 @@ If present:
 | `syncBossHp(hp, { world })`, `enterBossHpPhase(hp, context)` | the boss hitpoint controls |
 | `planPracticeRestart(command, mechanics, { playerPos })`, `planRestartStart(mechanics, { playerPos })` | restarts |
 
+The application asks one more, if present, after every tick:
+`getAutoMarkers({ world })` returns the moments of the fight worth going back
+to that it is in, as a list of `{ id, label }` ("wave 4 reinforcements"). The
+first tick an id is listed on becomes a marker of the replay
+(`client/replay/markers.js`) with its label; an id that can come again (a
+second shield) carries the tick it began on. It only reads: what it needs is
+already in the encounter's state or the world. The Colosseum, the Inferno, the
+Doom of Mokhaiotl, Sol Heredit, the Leviathan, Araxxor and Zebak have it.
+
 `getEngineRules()` returns an object the engine reads during combat. All
 members are optional: `onTickStart`, `playerInputLocked`,
 `modifyPlayerCombatParams`, `validateAttack`, `multiCombat`,
 `incomingDamageMultiplier`, `outgoingDamageMultiplier`, `specialAttacks`,
 `playerMinimumHit`, `playerAlwaysAccurate`, `consumePlayerGuaranteedMaxHit`, `playerMaxHpReduction`,
 `prayerDrain`, `prayerRestrictions`, `itemRestrictions`,
-`monsterStatOverrides`, `onPlayerDamageTaken`, `isTombsOfAmascut`,
-`playerDamageOnNpc`. The last, `(damage, { attacker, target, attack }) =>
+`monsterStatOverrides`, `combatXpBonusOverrides`, `onPlayerDamageTaken`,
+`isTombsOfAmascut`, `playerDamageOnNpc`. `combatXpBonusOverrides`,
+`{ [npcTypeId]: percent }`, gives the combat experience bonus of the
+encounter's version of a monster (the awakened Vardorvis) where it is not
+the one `client/data/combatXpBonus.js` keeps for the NPC id; a player's
+combat experience from a hit is multiplied by 1 + bonus / 100.
+`playerDamageOnNpc`, `(damage, { attacker, target, attack }) =>
 damage`, decides a player's hit on one of the encounter's NPCs as it lands
-(the Doom of Mokhaiotl's larvae and shield); `isDemonbaneAttack(attack)` of
+(the Doom of Mokhaiotl's larvae and shield). `predictPlayerDamageOnNpc`, of
+the same form, says what such a hit will do as the attack is launched,
+without side effects: the experience and the XP drop's hit are given from it
+(the Alchemical Hydra's shield). `isDemonbaneAttack(attack)` of
 `engine/playerAttack/formula.js` tells a demonbane weapon or spell. An NPC
 whose `formulaStats.alwaysAccuratePlayerHit` is true is hit by every attack.
 Two rules are asked as a player's attack is planned, with the rules
@@ -733,11 +751,11 @@ rules only through what `rendering.js` passes to `zebakDefinition`: `stats`,
 
 ## From a route to a running fight
 
-1. `application.js` splits the path (`xke`) and maps the slug to a kind with
+1. `application.js` splits the path (`getPathSegments`) and maps the slug to a kind with
    `Gfe`, a table built from the engine's `encounterDefinitions`
    (`/yama` → `yama_p3`; a retired slug such as `/zuk` maps to its
    successor with mechanics, through `resolveKindOrRetiredEntry` of
-   `client/encounters/registry.js`). The hook `Ake` keeps the URL and
+   `client/encounters/registry.js`). The hook `useRouting` keeps the URL and
    the scene state in step.
 2. `enterEncounter(kind)` (`ii` in the encounter manager hook) builds the
    engine with `createSimulationEngine({ encounterConfig: { kind, mechanics,
@@ -749,14 +767,14 @@ rules only through what `rendering.js` passes to `zebakDefinition`: `stats`,
    The scene state becomes
    `loading`, then `encounter` once the scene is ready.
 3. The same hook asks the cache for the arena
-   (`cacheManager.ld({ mapX, mapY, seedX, seedY, ... })`: flood fill from the
+   (`cacheManager.buildArenaConfig({ mapX, mapY, seedX, seedY, ... })`: flood fill from the
    seed tile over the map's collision), registers it for the kind (`oe`) and
    tells the engine to adopt it (`engine.reapplyArenaConfig()`).
 4. `Grid.js` builds the scene: `de.create(kind, { cacheManager,
    eventAudioPlayer, frameSoundTracker, encounterRenderConfig })` calls the
    presentation's `sceneBuilder`. It throws for a kind that has no
    presentation ("No scene builder registered for encounter kind").
-5. The simulation hook (`mse` in `Grid.js`) owns the engine. When it gets a
+5. The simulation hook (`useSimulationWiring` in `Grid.js`) owns the engine. When it gets a
    new engine it applies the loadout, applies the pre-pot (`applyPrepot`) and starts a
    recording (`engine.getEngineRunConfig()`). Every 600 ms it calls `engine.advanceTick(clickedTile)`,
    then `getState()` and `getLastTickEvents()`, records the frame, publishes the state to
@@ -770,13 +788,62 @@ A new encounter needs: a directory under `client/encounters/` whose
 its `presentation`. The registry and `presentations.js` find both; neither
 is a chunk, and neither is edited. The
 route's title and description come from the descriptor when `application.js`
-has no search-engine entry for the kind (`Qfe`; `buildDescriptorSeoEntry`
-is the fallback, and it marks the page `noindex`). Default loadouts (`_le`
+has no `seo` (`client/seo/routes.js`, which marks such a page `noindex`;
+the build writes a page per route from the same list,
+`tools/seo/prerender.mjs`). Default loadouts (`EQUIPMENT_PRESETS`
 in `application.js`) are optional: a kind without them starts with nothing
 worn. `docs/ADDING-AN-ENCOUNTER.md` is the guide, with what still needs a
 chunk; `test/fixtures/training-ground/` is an encounter added that way,
 which only the tests register.
 
+## From a URL to the first frame
+
+What a visitor waits for, and what keeps it short. Measure with
+`node tools/measure-vitals.mjs` after a build (first and largest paint, the
+loading screen's end, main-thread blocking; cold and warm, throttled and
+not); `node tools/trace-boot.mjs` lists what a cold visit waited for.
+
+1. **The loading screen is in `index.html`**, inside `#root`, as the
+   application first renders it (`LoadingScreen` in `application.js`), styled
+   by the stylesheets the page links. It is on screen before the application
+   script has arrived, over the page's own text, which the build writes ahead
+   of it (`tools/seo/prerender.mjs`); React replaces both on its first
+   render, starting on the same tip (`shellTip`).
+2. **The cache is asked for from `index.html`**: an inline script fetches
+   `osrs-cache/manifest.json` while the application script downloads, and
+   when IndexedDB does not hold the manifest's cache, the lobby's boot pack
+   (on `/`) or the whole cache (on any other route). `CacheManager` takes
+   them from `window.__cacheBoot`.
+3. **The lobby is fast, a fight is whole.** A first visit to `/` starts from
+   the lobby's boot pack (`CacheManager.bootFromPack` in `player.js`):
+   `osrs-cache/boot/lobby.zip`, a cache in the layout of `disk.zip` with
+   only the groups the lobby and its encounter picker read, a fifth of the
+   whole. A first visit to a fight's own URL has no pack: it downloads the
+   whole cache before it shows anything of the fight, as every visit used
+   to, so nothing of a fight is ever read from a pack.
+4. **The whole cache follows behind the lobby** (`CacheManager.hydrate`),
+   once the application has its own assets (`beginHydration`). Every index
+   reads through one `MemoryStore`; the pack has the whole cache's reference
+   tables and the same bytes for its groups, so the whole cache's files are
+   put into that store in place and the loaders never notice. It is then
+   written to IndexedDB for the next visit, which reads it from there.
+5. **Entering a fight from the lobby waits for the whole cache.** Every
+   scene starts with `loadMapSquare`. Until the whole cache is in, it waits
+   there for every square but the lobby's own: the squares the pack lacks,
+   which its idx files mark ("size 0, sector 1", `packCache` in
+   `tools/assets/cache.mjs`, read by `awaitsWholeCache`), and the square
+   `CacheManager` reads at start-up for the arena bounds, which is Yama's.
+   An encounter on the lobby's own map square would slip through; there is
+   none.
+
+The pack's list is `tools/assets/boot-packs/lobby.json`, in the shape of the
+cache group lists. `node tools/boot-packs.mjs` records it from a build: it
+opens `/` with the whole cache, walks every tile of the encounter picker
+(each draws a portrait), and writes down every group read. `npm run assets`
+cuts the pack from the trimmed cache and names it in
+`osrs-cache/manifest.json` (`bootPacks`). Record again after changing what
+the lobby shows: what a stale pack lacks reads as empty until the whole
+cache is in (`test/test-boot-pack-visit.mjs` fails on such a read).
 ## The import cycle
 
 There was one between `rendering.js` and the encounter modules. It is gone
@@ -812,6 +879,9 @@ fails on any other.
 
 To keep it so:
 
+- `client/net/` (the lobby's WebSocket) is checked too: it imports no
+  chunk, and no module of the engine, the data, the utilities or an
+  encounter imports it, so a fight runs the same without a server.
 - Do not import `rendering.js`, `Grid.js` or `application.js` from a module
   of the engine, the data, the utilities or an encounter. If a module needs
   something that is still in the chunk, move that thing out first
@@ -903,6 +973,9 @@ changed. Then the same tools as for the engine, applied to the directory:
 `replace-define-field.mjs` (and `replace-static-defines.mjs` for a class with
 static values), `rename-bindings.mjs` (with `--locals` for parameters and
 locals) and `rename-members.mjs`, each with a names file in `tools/names/`.
+A renamed export is followed where code reads it through the module object
+(`import * as`, `(await import(...)).name`, also in tests and tools), and
+refused where that object cannot be followed (`--module-reads` lists both).
 Last, `tools/repoint-imports.mjs` makes the other modules import the moved
 code from its module instead of through `rendering.js`.
 

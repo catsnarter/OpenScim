@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 try {
   const page = await browser.newPage({viewport:{width:1280,height:850}});
   const errors = [];
@@ -31,7 +29,7 @@ try {
       await route.fulfill({response:res,body:body.replace(marker,marker+probe)});
     });
   }
-  await page.goto("http://127.0.0.1:8791/zebak/");
+  await page.goto(process.env.TEST_ORIGIN + "/zebak/");
   await page.waitForFunction(() => document.body.innerText.includes("580/580"));
   await page.getByText(/Did you know\?/).first().waitFor({state:"hidden",timeout:45000});
   await page.mouse.click(640,425);
@@ -40,7 +38,7 @@ try {
   await page.waitForFunction(() => scene.npcInstanceManager.instanceRegistry.get("primary-npc")?.npcTypeId === 11732);
   const result = await page.evaluate(async () => {
     const cache = new (await import("/assets/player.js")).CacheManager();
-    await cache.Ad();
+    await cache.ensureCache();
     const sequences = [9634,9635].map(id => {
       const seq = cache.animationSystem.loadSeqType(id);
       return {id, duration:seq.skeletalEnd-seq.skeletalStart,sounds:[...(seq.frameSounds ?? [])].map(([frame,sounds])=> [frame,sounds.map(s=>s.id)])};

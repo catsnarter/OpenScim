@@ -2,10 +2,10 @@
 // accurate hit), its passive on enchanted bolts, and the bolt effects the
 // roller and the projection agree on.
 import assert from "node:assert/strict";
-import { register } from "node:module";
+import { installHooks } from "../tools/determinism/node-hooks.mjs";
 
 // The client's import graph reaches a stylesheet; the harness's hooks make it an empty module.
-register("../tools/determinism/node-hooks.mjs", import.meta.url);
+installHooks();
 globalThis.self ??= globalThis; // as the harness: PicoGL reads `self` when it loads
 globalThis.location ??= { pathname: "/" };
 const { selectPlayerAttackProfile } = await import("../client/engine/playerAttack/profiles.js");
@@ -32,8 +32,9 @@ function profile(weaponId, ammoId, extra = {}) {
   });
 }
 
-// The special: 75% energy, Evoke's animation.
-assert.deepEqual(getSpecialAttackDefinition(ZCB), { energyCost: 75, animationId: 9166 });
+// The special: 75% energy, and the crossbow's own shot as its animation (OBS: 9168 on every recorded Evoke).
+assert.deepEqual(getSpecialAttackDefinition(ZCB), { energyCost: 75, animationId: 9168 });
+assert.deepEqual(getSpecialAttackDefinition(27186), getSpecialAttackDefinition(ZCB));
 
 // Evoke doubles the attack roll and guarantees the bolt.
 {

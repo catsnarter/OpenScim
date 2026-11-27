@@ -1,15 +1,13 @@
-// Vardorvis loads on his route, is drawn from the trimmed cache (his arena,
+// Vardorvis loads on his route without a countdown, is drawn from the trimmed cache (his arena,
 // his model, the tendrils, the axes and the head), fights, and dies into the victory
 // screen. The mechanics themselves are digested by the determinism harness
 // (tools/determinism/scenarios/vardorvis.mjs).
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const origin = "http://127.0.0.1:8791";
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const origin = process.env.TEST_ORIGIN;
+const browser = await chromium.launch(browserOptions);
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 850 } });
@@ -17,6 +15,15 @@ try {
   page.on("pageerror", (error) => errors.push(error.stack));
   // A model or an animation missing from the trimmed cache is logged, not thrown.
   page.on("console", (message) => message.text().includes("Empty container") && errors.push(message.text()));
+  // Every "3, 2, 1" put on the page: he waits for the player, so there is none.
+  await page.addInitScript(() => {
+    window.countdownsSeen = 0;
+    new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes)
+          if (node.nodeType === 1 && (node.matches(".fight-start-countdown") || node.querySelector(".fight-start-countdown"))) window.countdownsSeen++;
+    }).observe(document, { childList: true, subtree: true });
+  });
   for (const [path, marker, probe] of [
     ["**/engine/SimulationEngine.js*", "this.encounter = options.encounter;", "if (options.encounter.kind === 'vardorvis') window.engine = this;"],
     ["**/encounters/shared/buildScene.js*", "const scene = new Scene();", "window.scene = scene;"],
@@ -34,6 +41,8 @@ try {
   await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 60000 });
   assert.equal(new URL(page.url()).pathname, "/vardorvis/");
   await page.waitForFunction(() => scene.isTerrainLoaded() && scene.isPlayerLoaded() && scene.isNpcLoaded() && scene.npcInstanceManager.instanceRegistry.size > 0, null, { timeout: 60000 });
+  await page.waitForFunction(() => engine.currentTick >= 2 || window.countdownsSeen > 0, null, { timeout: 60000 });
+  assert.equal(await page.evaluate(() => window.countdownsSeen), 0, "no countdown before Vardorvis's fight");
 
   // Ticked to his first tendrils, axes and head: every one is drawn. A head comes
   // with an axe cycle only two times in three, so he is kept at his hitpoints

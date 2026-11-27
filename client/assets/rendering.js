@@ -2770,7 +2770,7 @@ var dg = class e {
     if (!r) {
       throw new Error("main_file_cache data file not found in storage");
     }
-    const i = await a.Sm(ig, n);
+    const i = await a.hasCacheFile(ig, n);
     s.set(i ? ig : "main_file_cache.dat", r);
     const l = await a.vm(og, n);
     if (l) {
@@ -8806,6 +8806,27 @@ var NpcType = class extends Type {
         a.readUnsignedByte();
       } else if (e >= 170 && e < 176) {
         a.readUnsignedShort();
+      } else if (e === 130 || e === 147) {
+        // Flags with no operands (RuneLite's NpcLoader: 147, zbuf off); nothing here reads them (#148).
+      } else if (e === 251 || e === 252 || e === 253) {
+        // A menu option: 251 one under another (u8 index, u8 sub-id, string), 252 one shown while a game variable is
+        // in a range (u8 index, u16 varp, u16 varbit, i32 min, i32 max, string), 253 both (u8 index, u16 sub-id,
+        // u16 varp, u16 varbit, i32 min, i32 max, string) (RuneLite's EntityOpsLoader). Nothing here shows them; read
+        // so that what follows is (before, they were read as opcodes and cut 9 NPCs short, #148).
+        const op = { opcode: e, index: a.readUnsignedByte() };
+        if (e === 251) {
+          op.subId = a.readUnsignedByte();
+        } else {
+          if (e === 253) {
+            op.subId = a.readUnsignedShort();
+          }
+          op.varp = a.readUnsignedShort();
+          op.varbit = a.readUnsignedShort();
+          op.min = a.readInt();
+          op.max = a.readInt();
+        }
+        op.text = this.readString(a);
+        (this.extraOps ??= []).push(op);
       } else if (e === 249) {
         this.params = Type.readParamsMap(a, this.params);
       } else {
@@ -9130,6 +9151,17 @@ var ObjType = class extends Type {
       a.readInt();
       a.readInt();
       this.readString(a);
+    } else if (e === 15 || e === 160 || e === 251) {
+      // Flags with no operands (RuneLite's ItemLoader: not tradeable, stackable 2, bronzeman); nothing here reads
+      // them. Before, each was skipped as unknown (#140).
+    } else if (e === 161) {
+      // A u16 count, then that many u16 (RuneLite's ItemLoader: holdingWhitelist; the Obligator's and Zorya's tome's
+      // are animation ids). Before, its operands were read as opcodes and the item cut short (#140).
+      const n = a.readUnsignedShort();
+      this.holdingWhitelist = [];
+      for (let t = 0; t < n; t++) {
+        this.holdingWhitelist.push(a.readUnsignedShort());
+      }
     } else if (e === 249) {
       this.params = Type.readParamsMap(a, this.params);
     } else {
@@ -16988,7 +17020,11 @@ function yy(e, a) {
 // width: what the game's server sends, 1 + floor(29 * hp / max) thirtieths,
 // none at 0 hp (RuneLite, OpponentInfoOverlay). It is taken when a hit comes
 // (`state.healthBarVisibleUntilTick` changes) and kept until the next one: in
-// the game a heal does not move the bar.
+// the game a heal does not move the bar. It is kept only once the state drawn
+// has the hit (`hasHit`): live, a frame can take the engine's new events
+// with the application's state of the tick before, and the bar then kept the
+// hitpoints from before the hit until the next one, or for good after a
+// killing hit. A replay hands both from one frame and never had it.
 // The player's health bar sits 15 above his model as it is posed in the
 // frame drawn: the game's logical height (the observer's "healthbars"
 // lines, 2026-11-23: 199 to 201 standing, 192 to 288 attacking; the bar's
@@ -17038,7 +17074,7 @@ function withThrallRenderConfig(config) {
 // Measured at a 3x interface: observer crops doom-20261123-192925 and
 // Pictures/hp_test.png, the 30x5 bar drawn 90x15, the 25 px prayer 75.
 var OVERLAY_LAYER_SELECTOR =
-  "[data-overhead-icons],[data-tick-counters],[data-overhead-texts],[data-hitsplats],[data-healthbars],[data-timerbars]";
+  "[data-overhead-icons],[data-tick-counters],[data-overhead-texts],[data-overhead-bitmap],[data-hitsplats],[data-healthbars],[data-timerbars]";
 // The camera the overlay renderer projects with: screen points in game
 // pixels. Only the 3D camera (it has a viewport) projects like the game.
 function overlayCamera(camera, model, gameScale) {
@@ -17065,9 +17101,9 @@ function scaleOverlayLayers(roots, k = 1) {
     }
   }
 }
-function shownHealthRatio(state, hp, maxHp) {
+function shownHealthRatio(state, hp, maxHp, hasHit = true) {
   if (state.shownRatioUntilTick !== state.healthBarVisibleUntilTick) {
-    state.shownRatioUntilTick = state.healthBarVisibleUntilTick;
+    state.shownRatioUntilTick = hasHit ? state.healthBarVisibleUntilTick : undefined;
     state.shownRatio = !(maxHp > 0) ? 1 : hp <= 0 ? 0 : Math.min(30, 1 + Math.floor((29 * hp) / maxHp)) / 30;
   }
   return state.shownRatio;
@@ -19556,6 +19592,17 @@ var PicoGLRenderer = class {
       const c = a.modelMatrix[14] - d;
       return i * i + g * g + c * c - (n * n + s * s + r * r);
     });
+    // The sorted meshes (the players' bodies) are coloured without writing depth, one after the other: with more
+    // than one, the farthest from the camera first, so that a nearer player covers a farther one.
+    if (sorted.length > 1) {
+      const far = (e) => {
+        const x = e.modelMatrix[12] - l;
+        const y = e.modelMatrix[13] - o;
+        const z = e.modelMatrix[14] - d;
+        return x * x + y * y + z * z;
+      };
+      sorted.sort((e, a) => far(a) - far(e));
+    }
     const opaqueRuns2 = this.opaqueRuns;
     const transparentRuns2 = this.transparentRuns;
     opaqueRuns2.length = 0;
@@ -22287,16 +22334,65 @@ var aA = {
     setting: "zukSetTimer",
     defaultKey: "X",
   },
+  // The replay's undo and markers (client/replay/markers.js), listed under General.
+  replayUndo: {
+    label: "Undo",
+    group: "Replay",
+    defaultKey: "Ctrl+Z",
+  },
+  replayAddMarker: {
+    label: "Add marker",
+    group: "Replay",
+    defaultKey: "F8",
+  },
+  replayLoadMarker: {
+    label: "Load marker",
+    group: "Replay",
+    defaultKey: "F9",
+  },
+  replayPreviousMarker: {
+    label: "Previous marker",
+    group: "Replay",
+    defaultKey: "F7",
+  },
+  replayNextMarker: {
+    label: "Next marker",
+    group: "Replay",
+    defaultKey: "Shift+F7",
+  },
+  replayLoadAutoMarker: {
+    label: "Load auto marker",
+    group: "Replay",
+    defaultKey: "Shift+F9",
+  },
 };
-var tA = ["zukSetTimerAdvance", "zukSetTimerReset", "zukSetTimerReveal"];
+var tA = [
+  "zukSetTimerAdvance",
+  "zukSetTimerReset",
+  "zukSetTimerReveal",
+  "replayUndo",
+  "replayAddMarker",
+  "replayLoadMarker",
+  "replayPreviousMarker",
+  "replayNextMarker",
+  "replayLoadAutoMarker",
+];
 var nA = {
   zukSetTimerAdvance: aA.zukSetTimerAdvance.defaultKey,
   zukSetTimerReset: aA.zukSetTimerReset.defaultKey,
   zukSetTimerReveal: aA.zukSetTimerReveal.defaultKey,
+  replayUndo: aA.replayUndo.defaultKey,
+  replayAddMarker: aA.replayAddMarker.defaultKey,
+  replayLoadMarker: aA.replayLoadMarker.defaultKey,
+  replayPreviousMarker: aA.replayPreviousMarker.defaultKey,
+  replayNextMarker: aA.replayNextMarker.defaultKey,
+  replayLoadAutoMarker: aA.replayLoadAutoMarker.defaultKey,
 };
 var sA = {
   "Zuk Set Timer":
     "Active during Zuk while Set Timer is on. Changes save immediately.",
+  Replay:
+    "Rewind the fight and mark its ticks, while it runs or in its replay. Changes save immediately.",
 };
 var rA = "osrs-keybinds";
 var iA = "osrs-camera-keybinds";
@@ -22314,11 +22410,12 @@ var dA = {
 var gA = {
   closeOverlay: "Escape",
 };
+// The camera turns by the arrow keys, as in the game: every letter is free for the chat.
 var cA = {
-  orbitRotateLeft: "a",
-  orbitRotateRight: "d",
-  orbitTiltUp: "w",
-  orbitTiltDown: "s",
+  orbitRotateLeft: "ArrowLeft",
+  orbitRotateRight: "ArrowRight",
+  orbitTiltUp: "ArrowUp",
+  orbitTiltDown: "ArrowDown",
   freeformForward: "w",
   freeformBackward: "s",
   freeformLeft: "a",
@@ -22411,11 +22508,38 @@ function vA(e) {
   cS(rA, e.gamePanel);
   cS(iA, e.camera);
 }
+// The camera's first default keys. Stored keys that are still exactly these move to the arrow keys, once
+// (they were saved on the first visit, chosen or not); keys set after that are kept.
+var cameraLetterKeys = {
+  orbitRotateLeft: "a",
+  orbitRotateRight: "d",
+  orbitTiltUp: "w",
+  orbitTiltDown: "s",
+};
+function cameraKeysToArrows(e) {
+  if (!e || gS("osrs-camera-arrow-keys")) {
+    return e;
+  }
+  cS("osrs-camera-arrow-keys", true);
+  if (!mA.every((a) => e[a] === cameraLetterKeys[a])) {
+    return e;
+  }
+  const a = {
+    ...e,
+  };
+  for (const e of mA) {
+    a[e] = cA[e];
+  }
+  return a;
+}
 function pA() {
-  const e = gS(lA);
+  const stored = gS(lA);
+  const storedCamera = cameraKeysToArrows(stored?.camera);
+  const e = stored && storedCamera !== stored.camera ? { ...stored, camera: storedCamera } : stored;
   if (e) {
     const a = uA(e);
     if (
+      e !== stored ||
       Object.keys(e.plugins ?? {}).some((e) => !Object.hasOwn(nA, e)) ||
       Object.keys(e.ui ?? {}).some((e) => !Object.hasOwn(gA, e)) ||
       yA.some((t) => e[t.domain]?.[t.action] !== wA(a, t))
@@ -22426,7 +22550,7 @@ function pA() {
   }
   const a = uA({
     gamePanel: gS(rA) ?? undefined,
-    camera: gS(iA) ?? undefined,
+    camera: cameraKeysToArrows(gS(iA) ?? undefined),
   });
   vA(a);
   return a;
@@ -30711,6 +30835,77 @@ var KL = {
     defend: -1,
     mainAttack: 12397,
   },
+  // The Fractured Archive's weapons (CACHE: the TFA_HUMAN_* sequence names; the turns are the usual ones, inferred).
+  // The crossbows fire from the left and the right in turn (TFA_HUMAN_ASCENSION_CROSSBOW_FIRE_LEFT/RIGHT_PVN);
+  // only the left is drawn. The Obligator's styles have their own attack animations (weaponCategories.js).
+  34681: { // Ascension crossbows
+    idle: 15110,
+    walk: 15111,
+    run: 15112,
+    walkBack: 15111,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 424,
+    defend: 424,
+    mainAttack: 15114,
+  },
+  34715: { // Obligator
+    idle: 15118,
+    walk: 15119,
+    run: 15121,
+    walkBack: 15120,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15133,
+    defend: 15133,
+    mainAttack: 15123,
+  },
+  34717: { // Obligator (uncharged)
+    idle: 15118,
+    walk: 15119,
+    run: 15121,
+    walkBack: 15120,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15133,
+    defend: 15133,
+    mainAttack: 15123,
+  },
+  34725: { // Zorya's tome
+    idle: 15135,
+    walk: 15136,
+    run: 15138,
+    walkBack: 15137,
+    turnLeft: 821,
+    turnRight: 822,
+    turn180: 823,
+    standTurn: 823,
+    shuffle: -1,
+    attackStyle1: -1,
+    attackStyle2: -1,
+    attackStyle3: -1,
+    attackStyle4: 15141,
+    defend: 15141,
+    mainAttack: 15139,
+  },
 };
 var qL = {
   53: {
@@ -31285,6 +31480,21 @@ var qL = {
     hitSpotanimHeight: 144,
     sourceName: "Bolts",
   },
+  // Ascension bolts: ASCENSION_CROSSBOWBOLT_TRAVEL and, for the onyx ones, ASCENSION_CROSSBOWBOLT_ONYX_TRAVEL
+  // (CACHE: spot animation names). The heights and timing are the standard bolts' (inferred).
+  ...Object.fromEntries([34684, 34690, 34696, 34702, 34708].map((boltId) => [boltId, {
+    attackAnimation: 15114,
+    castSpotanim: -1,
+    castSpotanimHeight: 92,
+    projectileId: boltId >= 34702 ? 4438 : 4437,
+    projectileStartHeight: 172,
+    projectileEndHeight: 144,
+    projectileSlope: 5,
+    projectileStartDelay: 41,
+    hitSpotanim: -1,
+    hitSpotanimHeight: 144,
+    sourceName: "Ascension bolts",
+  }])),
   9706: {
     attackAnimation: 426,
     castSpotanim: 806,
@@ -31770,6 +31980,20 @@ var qL = {
     hitSpotanim: 3368,
     hitSpotanimHeight: 124,
   },
+  // Zorya's tome: TFA_HUMAN_ZORYA_TOME_ATTACK, VFX_ZORYA_TOME_STANDARD_SPOTANIM, VFX_ZORYA_TOME_PROJ and
+  // VFX_ZORYA_TOME_IMPACT (CACHE: sequence and spot animation names); heights and timing as the Eye of Ayak's (inferred).
+  34725: {
+    attackAnimation: 15139,
+    castSpotanim: 4433,
+    castSpotanimHeight: 0,
+    projectileId: 4427,
+    projectileStartHeight: 172,
+    projectileEndHeight: 124,
+    projectileSlope: 16,
+    projectileStartDelay: 51,
+    hitSpotanim: 4429,
+    hitSpotanimHeight: 124,
+  },
 };
 var ZL = {
   idle: 808,
@@ -32142,8 +32366,10 @@ var AD = {
     projectileStartHeight: 250,
     castSpotanimHeight: 0,
   },
+  // Zaryte crossbow: its bolt leaves higher than the other crossbows' (OBS:
+  // 177 -> 146 on every shot in 12 recorded Nex kills; theirs 155 -> 146).
   26374: {
-    projectileStartHeight: 155,
+    projectileStartHeight: 177,
     projectileEndHeight: 146,
   },
   29577: {
@@ -32302,14 +32528,15 @@ var RD = {
   28688: WD(10656, 2599),
 };
 // Zaryte crossbow, Evoke: its own bolt, zcb_specialattack (OBS, rsprox
-// transcript 227/01752 via tsps: spotanim 1995, start 41, slope 5, heights
-// 44 -> 36.5 in quarters of these units).
+// transcript 227/01752 via tsps: spotanim 1995, start 41, slope 5). The
+// animation and the start height as 18 recorded Evokes in Nex kills show
+// them (OBS): the ordinary shot's 9168, and 177 -> 146.
 var zaryteEvokeVisuals = {
-  attackAnimation: 9166,
+  attackAnimation: 9168,
   castSpotanim: -1,
   castSpotanimHeight: 92,
   projectileId: 1995,
-  projectileStartHeight: 176,
+  projectileStartHeight: 177,
   projectileEndHeight: 146,
   projectileSlope: 5,
   projectileStartDelay: 41,
@@ -32323,6 +32550,20 @@ var PD = {
   // 472, projectile 473, impact 474; CACHE: spot animations 472 to 474 are
   // models 3473, 9948 and 9949). An ordinary shot draws its arrow instead.
   6724: qL[6724],
+  // Zorya's flow: VFX_ZORYA_TOME_SPECIAL_PROJ and VFX_ZORYA_TOME_SPECIAL_IMPACT (CACHE: spot animation names). The
+  // special's own animation and cast graphic are its definition's (specialAttackDefinitions.js).
+  34725: {
+    attackAnimation: 15140,
+    castSpotanim: -1,
+    castSpotanimHeight: 0,
+    projectileId: 4428,
+    projectileStartHeight: 172,
+    projectileEndHeight: 124,
+    projectileSlope: 16,
+    projectileStartDelay: 51,
+    hitSpotanim: 4430,
+    hitSpotanimHeight: 124,
+  },
   26374: zaryteEvokeVisuals,
   27186: zaryteEvokeVisuals,
   27665: LD,
@@ -32380,9 +32621,14 @@ function FD(e, a, t = false) {
     const i = r && n?.category === "Thrown" && / dart(?:\(|$)/i.test(n.name);
     const l = (t === "bow" || t === "crossbow") && isAmmoCompatibleWithWeapon(s, a);
     if (i || l) {
+      // Enchanted dragon bolts fly as dragon bolts, 1468 (OBS: ruby dragon
+      // bolts (e) from a Zaryte crossbow in recorded Nex kills); enchanted gem
+      // bolts as plain bolts, 27 (OBS: ruby bolts (e) from an Armadyl crossbow).
+      const dragonBoltsE = t === "crossbow" && / dragon bolts \(e\)$/i.test(getEquipmentDefinition(a)?.name ?? "");
       const n =
         qL[a] ??
         qL[getCanonicalEquipmentId(variantArrowsByItemId[a]?.baseArrowId ?? a)] ??
+        (dragonBoltsE ? qL[21905] : undefined) ??
         (t === "crossbow" ? qL[9144] : undefined);
       if (!n) {
         return;
@@ -35512,7 +35758,8 @@ var PlayerVisualTracker = class {
   }
   computeMovementSpeed(e) {
     let a = 4;
-    if (this.currentTurnTarget() !== this._renderAngle && this.turnSpeed !== 0 && !this.isEffectivelyInteracting()) {
+    // OBS (the game's client): half speed while the drawn angle is not yet the step's direction, only without a target.
+    if (this._targetAngle !== this._renderAngle && this.turnSpeed !== 0 && !this.isEffectivelyInteracting()) {
       a = 2;
     }
     if (this.pathLength > 2) {
@@ -35569,7 +35816,9 @@ var PlayerVisualTracker = class {
     if (this.pathLength === 0) {
       return null;
     }
-    const e = (this.currentTurnTarget() - this._renderAngle) & zW;
+    // OBS (the game's client): the walk, sideways or backward sequence is chosen by the step's direction
+    // against the drawn angle, not by a faced target's: a player stepping away from its target walks back.
+    const e = (this._targetAngle - this._renderAngle) & zW;
     const a = e > wW ? e - yW : e;
     if (a >= -256 && a <= 256) {
       return "walk";
@@ -36383,8 +36632,8 @@ function SR(e) {
         }
       } else if (mB(n, "attack_started")) {
         const r =
-          n.usingSpecialAttack && n.weaponId !== undefined
-            ? getSpecialAttackDefinition(n.weaponId)
+          n.usingSpecialAttack && (n.specialAttackItemId ?? n.weaponId) !== undefined
+            ? getSpecialAttackDefinition(n.specialAttackItemId ?? n.weaponId)
             : undefined;
         const l = FD(n.weaponId, n.ammoId, n.usingSpecialAttack);
         const o = n.style === "magic" && n.spellCast?.accurate === false;
@@ -36395,13 +36644,24 @@ function SR(e) {
                 hitSpotanim: fR.spotAnimId,
                 hitSpotanimHeight: fR.height,
               }
-            : l;
+            : l && n.hitGraphicId !== undefined
+              ? { ...l, hitSpotanim: n.hitGraphicId } // an attack's own impact (Zorya's flow's buffed attacks)
+              : l;
         if (r?.graphicId !== undefined && r.graphicId >= 0) {
           t = {
             kind: "graphic",
             key: s,
             tick: n.tick,
             spotAnimId: r.graphicId,
+            height: 0,
+          };
+        } else if (!n.usingSpecialAttack && n.attackGraphicId !== undefined) {
+          // A weapon style's own graphic (the Obligator's Thrust: its chain, weaponCategories.js).
+          t = {
+            kind: "graphic",
+            key: s,
+            tick: n.tick,
+            spotAnimId: n.attackGraphicId,
             height: 0,
           };
         } else if (d && d.castSpotanim >= 0) {
@@ -37013,6 +37273,7 @@ function CR(e) {
     case "weapon":
       return [
         e.specAnimationId,
+        e.attackAnimationId,
         iD(e.weaponId, e.attackKind),
         FD(e.weaponId)?.attackAnimation,
         ...lD(e.weaponId).map((e) => e.attack),
@@ -37098,8 +37359,9 @@ function BR(e) {
             kind: "weapon",
             weaponId: i,
             attackKind: r.attackKind,
+            attackAnimationId: r.attackAnimationId,
             specAnimationId: r.usingSpecialAttack
-              ? getSpecialAttackDefinition(i ?? 0)?.animationId
+              ? getSpecialAttackDefinition(r.specialAttackItemId ?? i ?? 0)?.animationId
               : undefined,
           };
     t = {
@@ -43481,6 +43743,7 @@ var K_ = {
   block: "block",
   poison: "poison",
   venom: "venom",
+  disease: "disease",
   doom: "doom",
   heal: "heal",
   burn: "burn",
@@ -43571,6 +43834,17 @@ var UIOverlayRenderer = class e {
     const a = this.playerBarAnchor(t, s, posedModelHeight);
     return a && { x: a.x, y: a.y - 5 - 2 };
   }
+  // Where a player's overhead chat stands: the top of the model as it is drawn. OBS (the game's client): an actor's
+  // overhead text hangs from the top of its posed model. `lift`: how far the scene raises the model off the
+  // ground when it draws it (its lowest point, and the stance's own offset); the top is that much higher than
+  // the posed height says. Without it the text stood in the head.
+  playerChatAnchor(t, s, posedModelHeight, lift = 0) {
+    return t.tileToScreen({
+      x: s[0] + 0.5,
+      y: s[1] + 0.5,
+      level: -Nb(this.terrainHeights, s[0], s[1]) / 128 + ((posedModelHeight || playerLogicalHeight) + lift) / 128,
+    });
+  }
   SL(a, t, n, s, posedModelHeight) {
     const r = e.bL(n);
     if (!r) {
@@ -43641,7 +43915,7 @@ var UIOverlayRenderer = class e {
     }
     const d = r - (i.healthBarVisibleUntilTick - e.HEALTHBAR_DURATION_TICKS);
     const g = Math.min(d / e.HEALTHBAR_DURATION_TICKS, 1);
-    const c = shownHealthRatio(i, n.playerHP, n.maxHP);
+    const c = shownHealthRatio(i, n.playerHP, n.maxHP, n.currentTick >= i.healthBarVisibleUntilTick - e.HEALTHBAR_DURATION_TICKS);
     a.healthBars ||= [];
     a.healthBars.push({
       screenX: o.x,
@@ -43664,25 +43938,36 @@ var UIOverlayRenderer = class e {
   static AL(a, t) {
     return a + e.OSRS_HEALTHBAR_HEIGHT + (e.OSRS_HEALTHBAR_HEIGHT + 2) * t;
   }
-  LL(a, t, n, s, r, posedModelHeight) {
-    const i = e.wL(n.playerNextAttackTick, n.playerAttackSpeed, n.currentTick);
-    if (i === null) {
-      return;
-    }
-    const o = this.playerOverheadBase(t, s, posedModelHeight);
+  // The plugin Attack Timer Metronome (client/plugins/attackTimerMetronome.js),
+  // where RuneLite's draws them: the bar's top 7 px under the point at the
+  // player's logical height, its offset and 5 more, centred on it; the number
+  // at the height of its position and offset.
+  LL(a, t, n, s) {
+    const state = { currentTick: n.currentTick, nextAttackTick: n.playerNextAttackTick, attackSpeed: n.playerAttackSpeed };
+    const at = (height) => t.tileToScreen({ x: s[0] + 0.5, y: s[1] + 0.5, level: -Nb(this.terrainHeights, s[0], s[1]) / 128 + height / 128 });
+    const bar = getAttackTimerBar(state);
+    const o = bar && at(playerLogicalHeight + bar.heightOffset + 5);
     if (o) {
       a.timerBars ||= [];
       a.timerBars.push({
         screenX: o.x,
-        screenY: e.AL(o.y, 1),
-        ratio: i,
-        width: e.OSRS_HEALTHBAR_WIDTH,
-        height: e.OSRS_HEALTHBAR_HEIGHT,
+        screenY: o.y + 7 + bar.height / 2,
+        ratio: bar.ratio,
+        width: bar.width,
+        height: bar.height,
+        ...(bar.frontImage ? { frontImage: bar.frontImage, backImage: bar.backImage } : {}),
         key: "player-attack-timer-metronome",
       });
     }
+    const number = getAttackTimerNumber(state);
+    const p = number && at((tickHeights[number.position] ?? tickHeights.DEFAULT)(playerLogicalHeight) + number.heightOffset);
+    if (p) {
+      a.tickCounters ||= [];
+      // RuneLite writes from its point up, the point on the text's baseline.
+      a.tickCounters.push({ screenX: p.x, screenY: p.y - number.fontSize / 2, text: number.text, textColor: number.textColor, fontSize: number.fontSize, fontFamily: number.fontFamily, key: "player-attack-timer-number" });
+    }
   }
-  DL(a, t, n, s, { tickCounter: tickCounter, attackCooldown: attackCooldown }, posedModelHeight) {
+  DL(a, t, n, s, { tickCounter: tickCounter }, posedModelHeight) {
     const l = [];
     if (tickCounter && tickCounter.max > 0) {
       const e = ((n.currentTick - 1) % tickCounter.max) + 1;
@@ -43691,15 +43976,6 @@ var UIOverlayRenderer = class e {
         text: e.toString(),
         textColor: E_(e, tickCounter.max, tickCounter.colors),
         key: "player-tick-counter",
-      });
-    }
-    const o = n.playerNextAttackTick - n.currentTick;
-    if (attackCooldown && o > 0) {
-      l.push({
-        placement: attackCooldown,
-        text: o.toString(),
-        textColor: e.ATTACK_COOLDOWN_TICKS_COLOR,
-        key: "player-attack-cooldown-ticks",
       });
     }
     if (l.length === 0) {
@@ -43718,6 +43994,10 @@ var UIOverlayRenderer = class e {
         Number(e.placement.abovePrayerIcon) -
         Number(a.placement.abovePrayerIcon),
     );
+    // Above Attack Timer Metronome's number (LL, drawn first) where the two would meet: not where an X offset puts
+    // this one beside it. inferred: a character as wide as 0.6 of its font size (the numbers' widths are not measured).
+    const metronomeNumber = a.tickCounters.find((counter) => counter.key === "player-attack-timer-number");
+    const halfWidth = (text, size) => String(text).length * size * 0.3;
     let f = Number.POSITIVE_INFINITY;
     for (const { placement: placement, ...t } of l) {
       const {
@@ -43729,7 +44009,11 @@ var UIOverlayRenderer = class e {
       const l = abovePrayerIcon
         ? g.y - m - fontSize / 2 - OVERHEAD_NUMBER_GAP2
         : c;
-      const o = Math.min(l, f - OVERHEAD_NUMBER_GAP2 - fontSize / 2);
+      const meetsMetronome =
+        metronomeNumber !== undefined &&
+        Math.abs(g.x + offsetX - metronomeNumber.screenX) < halfWidth(t.text, fontSize) + halfWidth(metronomeNumber.text, metronomeNumber.fontSize);
+      const below = meetsMetronome ? Math.min(f, metronomeNumber.screenY - metronomeNumber.fontSize / 2) : f;
+      const o = Math.min(l, below - OVERHEAD_NUMBER_GAP2 - fontSize / 2);
       f = o - fontSize / 2;
       a.tickCounters.push({
         ...t,
@@ -43740,7 +44024,10 @@ var UIOverlayRenderer = class e {
     }
   }
   static bL(e) {
-    const { activePrayer: activePrayer } = e;
+    // An encounter may show another icon over the player than his prayer's: its snapshot's
+    // state.playerOverheadPrayer when set (Phosani's curse, encounters/phosanis-nightmare).
+    const shown = e.encounter?.state?.playerOverheadPrayer;
+    const activePrayer = shown !== undefined ? shown : e.activePrayer;
     if (activePrayer) {
       return V_[activePrayer];
     }
@@ -43982,7 +44269,7 @@ var UIOverlayRenderer = class e {
           s - (d.healthBarVisibleUntilTick - e.HEALTHBAR_DURATION_TICKS);
         c = Math.min(a / e.HEALTHBAR_DURATION_TICKS, 1);
       }
-      const m = d ? shownHealthRatio(d, o.hp, o.maxHp) : 1;
+      const m = d ? shownHealthRatio(d, o.hp, o.maxHp, l >= d.healthBarVisibleUntilTick - e.HEALTHBAR_DURATION_TICKS) : 1;
       a.healthBars ||= [];
       a.healthBars.push({
         screenX: g.x,
@@ -44188,7 +44475,6 @@ ce(UIOverlayRenderer, "OSRS_OVERHEAD_TEXT_COLOR", "#ffff00");
 ce(UIOverlayRenderer, "OSRS_OVERHEAD_TEXT_FONT_SIZE", 16);
 ce(UIOverlayRenderer, "OVERHEAD_NUMBER_GAP", 2);
 ce(UIOverlayRenderer, "HP_TEXT_ABOVE_BAR_HEIGHT", 25 / 128);
-ce(UIOverlayRenderer, "ATTACK_COOLDOWN_TICKS_COLOR", "#00ffff");
 ce(UIOverlayRenderer, "PLAYER_HEAD_WORLD_HEIGHT", 2.2);
 ce(UIOverlayRenderer, "PLAYER_MODEL_CENTER_HEIGHT", __.PLAYER_HEAD_WORLD_HEIGHT * (100 / 215));
 ce(UIOverlayRenderer, "HITSPLAT_OFFSETS", [
@@ -46086,177 +46372,16 @@ var SceneCompositor = class e {
       this.spotAnimRenderer.loadById(this.spotAnimModelLoader, i.projectileId);
     }
     try {
-      const a = e.loadPlayerModel(n, s);
-      const t = this.playerAnimController?.QL() ?? null;
+      const a = this.buildPlayerRig(
+        e,
+        n,
+        s,
+        this.playerAnimController,
+        () => this.playerAnimController?.buildPlayerAnimatedMesh() ?? null,
+        (e) => this.RD(e),
+      );
       if (a) {
-        a.mergedModel.calculateBounds();
-        const minHeight2 = a.mergedModel.minHeight;
-        let r = null;
-        if (this.playerAnimationSystem) {
-          const e = new Int32Array(a.mergedModel.verticesX);
-          const n = new Int32Array(a.mergedModel.verticesY);
-          const i = new Int32Array(a.mergedModel.verticesZ);
-          const l = a.mergedModel.faceAlphas
-            ? new Int8Array(a.mergedModel.faceAlphas)
-            : null;
-          const o = lD(s.weapon);
-          const d = {
-            idle: this.loadFrameBasedSeq(o, "idle"),
-            walk: this.loadFrameBasedSeq(o, "walk"),
-            run: this.loadFrameBasedSeq(o, "run"),
-            turnLeft: this.loadFrameBasedSeq(o, "turnLeft"),
-            turnRight: this.loadFrameBasedSeq(o, "turnRight"),
-            walkBack: this.loadFrameBasedSeq(o, "turn180"),
-            idleTurnLeft: this.loadFrameBasedSeq(o, "standTurn"),
-            idleTurnRight: this.loadFrameBasedSeq(o, "standTurn"),
-          };
-          d.eat = this.BD(829);
-          d.attack = this.loadFrameBasedSeq(o, "attack");
-          d.block = this.createFirstAvailableSequence(cD(s.weapon, s.shield));
-          const g = [ZL];
-          d.unarmed = {
-            idle: this.loadFrameBasedSeq(g, "idle"),
-            walk: this.loadFrameBasedSeq(g, "walk"),
-            run: this.loadFrameBasedSeq(g, "run"),
-            turnLeft: this.loadFrameBasedSeq(g, "turnLeft"),
-            turnRight: this.loadFrameBasedSeq(g, "turnRight"),
-            walkBack: this.loadFrameBasedSeq(g, "turn180"),
-            idleTurnLeft: this.loadFrameBasedSeq(g, "standTurn"),
-            idleTurnRight: this.loadFrameBasedSeq(g, "standTurn"),
-          };
-          // Optional: the other stances an encounter's render config names (`playerStances`: a name to the
-          // sequence of each slot). Its state's `playerStance` picks one each frame; no fight without the
-          // field is changed.
-          const stances = this.encounterRenderConfig?.playerStances;
-          if (stances) {
-            d.stances = {};
-            for (const [name, slots] of Object.entries(stances)) {
-              d.stances[name] = Object.fromEntries(
-                Object.entries(slots).map(([slot, seqId]) => [slot, this.BD(seqId)]),
-              );
-            }
-          }
-          const c = new PlayerModelAdapter(
-            a.mergedModel,
-            e,
-            n,
-            i,
-            l,
-            this.playerAnimationSystem,
-            () => this.playerAnimController?.buildPlayerAnimatedMesh() ?? null,
-            (e) => this.RD(e),
-          );
-          if (this.playerAnimController) {
-            this.playerAnimController.OL({
-              playerModelData: a,
-              animationSet: d,
-              modelAdapter: c,
-            });
-            r = this.playerAnimController;
-          } else {
-            r = new PlayerAnimationController({
-              playerModelData: a,
-              animationSet: d,
-              modelAdapter: c,
-              resolveTextureLayer: re.resolve,
-            });
-            if (t) {
-              try {
-                r.restoreConsumeAnim(t);
-              } catch (e) {
-                logger.warn(
-                  "SceneBuilder",
-                  "Failed to restore consume animation, continuing without it",
-                  e,
-                );
-              }
-            }
-          }
-        }
-        const i = (function (e, a, t) {
-          const mergedModel9 = e.mergedModel;
-          const {
-            faceColors1: faceColors1,
-            faceColors2: faceColors2,
-            faceColors3: faceColors3,
-          } = e.litColors;
-          const l = [];
-          const o = [];
-          const d = [];
-          const g = [];
-          const c = [];
-          mergedModel9.calculateVertexNormals();
-          const m = a;
-          const h = m ? m.length : mergedModel9.faceCount;
-          const f =
-            t !== undefined &&
-            Lm(mergedModel9.faceTextures, mergedModel9.faceCount);
-          const u = f ? [] : undefined;
-          const v = f ? [] : undefined;
-          const p = new Float32Array(6);
-          for (let e = 0; e < h; e++) {
-            const a = m ? m[e] : e;
-            const h = faceColors1[a];
-            let k = faceColors2[a];
-            let S = faceColors3[a];
-            if (S === -2) {
-              continue;
-            }
-            if (S === -1) {
-              S = k = h;
-            }
-            const b = mergedModel9.indices1[a];
-            const y = mergedModel9.indices2[a];
-            const z = mergedModel9.indices3[a];
-            const w = mergedModel9.faceAlphas
-              ? (255 - (mergedModel9.faceAlphas[a] & 255)) / 255
-              : 1;
-            const A = mergedModel9.faceBias
-              ? mergedModel9.faceBias[a] === -1
-                ? 0
-                : mergedModel9.faceBias[a] & 255
-              : 0;
-            const L = [b, y, z];
-            const D = [h, k, S];
-            let H = 0;
-            if (f) {
-              H = Dm(mergedModel9.faceTextures, a, t);
-              if (H > 0) {
-                Mm(mergedModel9, a, p, 0);
-              } else {
-                p.fill(0);
-              }
-            }
-            for (let e = 0; e < 3; e++) {
-              const a = L[e];
-              l.push(mergedModel9.verticesX[a]);
-              l.push(mergedModel9.verticesY[a]);
-              l.push(mergedModel9.verticesZ[a]);
-              bm(mergedModel9.normals, a, Ph, 0);
-              g.push(Ph[0], Ph[1], Ph[2]);
-              o.push(D[e] & 65535);
-              d.push(w);
-              c.push(A);
-              if (u && v) {
-                u.push(p[e * 2], p[e * 2 + 1]);
-                v.push(H);
-              }
-            }
-          }
-          return {
-            positions: new Float32Array(l),
-            hslColors: new Float32Array(o),
-            alphas: new Float32Array(d),
-            normals: new Float32Array(g),
-            faceBias: new Float32Array(c),
-            ...(u && v
-              ? {
-                  uvs: new Float32Array(u),
-                  textureIds: new Float32Array(v),
-                }
-              : {}),
-          };
-        })(a, undefined, re.resolve);
+        const { minHeight: minHeight2, controller: r, meshData: i } = a;
         const l = this.PD(i);
         this.playerAppearance = n;
         this.playerEquipment = s;
@@ -46279,6 +46404,193 @@ var SceneCompositor = class e {
     } finally {
       this.playerLoading = false;
     }
+  }
+  // One player's rig, built from explicit inputs: the model of an appearance and equipment (`e` the
+  // player model loader, `n` the appearance, `s` the equipment), its animation set, the adapter and the
+  // controller that animate it, and the mesh data of its first pose. `playerAnimController` is a
+  // controller to reuse (the local player's, kept across a reload; it is given the new model) or null
+  // for a new one; the adapter takes `buildAnimatedMesh` and `uploadAnimatedMesh` as its mesh source
+  // and sink. No field of the compositor is written. Returns null when the loader builds no model.
+  buildPlayerRig(e, n, s, playerAnimController, buildAnimatedMesh, uploadAnimatedMesh) {
+    const a = e.loadPlayerModel(n, s);
+    const t = playerAnimController?.QL() ?? null;
+    if (a) {
+      a.mergedModel.calculateBounds();
+      const minHeight2 = a.mergedModel.minHeight;
+      let r = null;
+      if (this.playerAnimationSystem) {
+        const e = new Int32Array(a.mergedModel.verticesX);
+        const n = new Int32Array(a.mergedModel.verticesY);
+        const i = new Int32Array(a.mergedModel.verticesZ);
+        const l = a.mergedModel.faceAlphas
+          ? new Int8Array(a.mergedModel.faceAlphas)
+          : null;
+        const o = lD(s.weapon);
+        const d = {
+          idle: this.loadFrameBasedSeq(o, "idle"),
+          walk: this.loadFrameBasedSeq(o, "walk"),
+          run: this.loadFrameBasedSeq(o, "run"),
+          turnLeft: this.loadFrameBasedSeq(o, "turnLeft"),
+          turnRight: this.loadFrameBasedSeq(o, "turnRight"),
+          walkBack: this.loadFrameBasedSeq(o, "turn180"),
+          idleTurnLeft: this.loadFrameBasedSeq(o, "standTurn"),
+          idleTurnRight: this.loadFrameBasedSeq(o, "standTurn"),
+        };
+        d.eat = this.BD(829);
+        d.attack = this.loadFrameBasedSeq(o, "attack");
+        d.block = this.createFirstAvailableSequence(cD(s.weapon, s.shield));
+        const g = [ZL];
+        d.unarmed = {
+          idle: this.loadFrameBasedSeq(g, "idle"),
+          walk: this.loadFrameBasedSeq(g, "walk"),
+          run: this.loadFrameBasedSeq(g, "run"),
+          turnLeft: this.loadFrameBasedSeq(g, "turnLeft"),
+          turnRight: this.loadFrameBasedSeq(g, "turnRight"),
+          walkBack: this.loadFrameBasedSeq(g, "turn180"),
+          idleTurnLeft: this.loadFrameBasedSeq(g, "standTurn"),
+          idleTurnRight: this.loadFrameBasedSeq(g, "standTurn"),
+        };
+        // Optional: the other stances an encounter's render config names (`playerStances`: a name to the
+        // sequence of each slot). Its state's `playerStance` picks one each frame; no fight without the
+        // field is changed.
+        const stances = this.encounterRenderConfig?.playerStances;
+        if (stances) {
+          d.stances = {};
+          for (const [name, slots] of Object.entries(stances)) {
+            d.stances[name] = Object.fromEntries(
+              Object.entries(slots).map(([slot, seqId]) => [slot, this.BD(seqId)]),
+            );
+          }
+        }
+        const c = new PlayerModelAdapter(
+          a.mergedModel,
+          e,
+          n,
+          i,
+          l,
+          this.playerAnimationSystem,
+          buildAnimatedMesh,
+          uploadAnimatedMesh,
+        );
+        if (playerAnimController) {
+          playerAnimController.OL({
+            playerModelData: a,
+            animationSet: d,
+            modelAdapter: c,
+          });
+          r = playerAnimController;
+        } else {
+          r = new PlayerAnimationController({
+            playerModelData: a,
+            animationSet: d,
+            modelAdapter: c,
+            resolveTextureLayer: re.resolve,
+          });
+          if (t) {
+            try {
+              r.restoreConsumeAnim(t);
+            } catch (e) {
+              logger.warn(
+                "SceneBuilder",
+                "Failed to restore consume animation, continuing without it",
+                e,
+              );
+            }
+          }
+        }
+      }
+      const i = (function (e, a, t) {
+        const mergedModel9 = e.mergedModel;
+        const {
+          faceColors1: faceColors1,
+          faceColors2: faceColors2,
+          faceColors3: faceColors3,
+        } = e.litColors;
+        const l = [];
+        const o = [];
+        const d = [];
+        const g = [];
+        const c = [];
+        mergedModel9.calculateVertexNormals();
+        const m = a;
+        const h = m ? m.length : mergedModel9.faceCount;
+        const f =
+          t !== undefined &&
+          Lm(mergedModel9.faceTextures, mergedModel9.faceCount);
+        const u = f ? [] : undefined;
+        const v = f ? [] : undefined;
+        const p = new Float32Array(6);
+        for (let e = 0; e < h; e++) {
+          const a = m ? m[e] : e;
+          const h = faceColors1[a];
+          let k = faceColors2[a];
+          let S = faceColors3[a];
+          if (S === -2) {
+            continue;
+          }
+          if (S === -1) {
+            S = k = h;
+          }
+          const b = mergedModel9.indices1[a];
+          const y = mergedModel9.indices2[a];
+          const z = mergedModel9.indices3[a];
+          const w = mergedModel9.faceAlphas
+            ? (255 - (mergedModel9.faceAlphas[a] & 255)) / 255
+            : 1;
+          const A = mergedModel9.faceBias
+            ? mergedModel9.faceBias[a] === -1
+              ? 0
+              : mergedModel9.faceBias[a] & 255
+            : 0;
+          const L = [b, y, z];
+          const D = [h, k, S];
+          let H = 0;
+          if (f) {
+            H = Dm(mergedModel9.faceTextures, a, t);
+            if (H > 0) {
+              Mm(mergedModel9, a, p, 0);
+            } else {
+              p.fill(0);
+            }
+          }
+          for (let e = 0; e < 3; e++) {
+            const a = L[e];
+            l.push(mergedModel9.verticesX[a]);
+            l.push(mergedModel9.verticesY[a]);
+            l.push(mergedModel9.verticesZ[a]);
+            bm(mergedModel9.normals, a, Ph, 0);
+            g.push(Ph[0], Ph[1], Ph[2]);
+            o.push(D[e] & 65535);
+            d.push(w);
+            c.push(A);
+            if (u && v) {
+              u.push(p[e * 2], p[e * 2 + 1]);
+              v.push(H);
+            }
+          }
+        }
+        return {
+          positions: new Float32Array(l),
+          hslColors: new Float32Array(o),
+          alphas: new Float32Array(d),
+          normals: new Float32Array(g),
+          faceBias: new Float32Array(c),
+          ...(u && v
+            ? {
+                uvs: new Float32Array(u),
+                textureIds: new Float32Array(v),
+              }
+            : {}),
+        };
+      })(a, undefined, re.resolve);
+      return {
+        modelData: a,
+        minHeight: minHeight2,
+        controller: r,
+        meshData: i,
+      };
+    }
+    return null;
   }
   loadFrameBasedSeq(e, a) {
     if (!this.playerAnimationSystem) {
@@ -46381,9 +46693,10 @@ var SceneCompositor = class e {
   GD() {
     return this.lastPlayerVisualCenter ?? [0, 0];
   }
-  RD(e) {
-    if (this.cachedPlayerMeshes.length !== 0) {
-      for (const a of this.cachedPlayerMeshes) {
+  // `meshes`: the local player's by default; a remote player of the lobby passes its own.
+  RD(e, meshes = this.cachedPlayerMeshes) {
+    if (meshes.length !== 0) {
+      for (const a of meshes) {
         a.uploadVersion = ++meshUploadVersion;
         const t = a.meshId.endsWith("-opaque") ? e.opaque : e.transparent;
         if (t) {
@@ -46847,7 +47160,8 @@ var SceneCompositor = class e {
     }
     return a;
   }
-  PD(e) {
+  // `meshIdPrefix`: the local player's ids by default; a remote player of the lobby passes its own.
+  PD(e, meshIdPrefix = `player-model-v${this.playerMeshVersion}`) {
     const a = 1 / 128;
     const t = new Float32Array([
       a,
@@ -46881,7 +47195,7 @@ var SceneCompositor = class e {
     if (s.opaque) {
       r.push({
         kind: "mesh3d",
-        meshId: `player-model-v${this.playerMeshVersion}-opaque`,
+        meshId: `${meshIdPrefix}-opaque`,
         materialId: "osrs-npc",
         modelMatrix: t,
         positions: s.opaque.positions,
@@ -46900,7 +47214,7 @@ var SceneCompositor = class e {
     if (s.transparent) {
       r.push({
         kind: "mesh3d",
-        meshId: `player-model-v${this.playerMeshVersion}-transparent`,
+        meshId: `${meshIdPrefix}-transparent`,
         materialId: "osrs-npc",
         modelMatrix: t,
         positions: s.transparent.positions,
@@ -46919,12 +47233,13 @@ var SceneCompositor = class e {
     }
     return r;
   }
-  createPlayerModelMatrix(e, a, t, n, s) {
+  // `out`: the local player's matrix by default; a remote player of the lobby passes its own.
+  createPlayerModelMatrix(e, a, t, n, s, out = this.playerModelMatrix) {
     const r = e;
     const i = (s / 2048) * 2 * Math.PI;
     const l = Math.cos(i);
     const o = Math.sin(i);
-    const playerModelMatrix2 = this.playerModelMatrix;
+    const playerModelMatrix2 = out;
     playerModelMatrix2[0] = r * l;
     playerModelMatrix2[1] = -r * o;
     playerModelMatrix2[2] = 0;
@@ -47168,12 +47483,13 @@ var SceneCompositor = class e {
         } else {
           const a = weaponId2;
           const t = (
-            e.usingSpecialAttack === true && a !== undefined ? getSpecialAttackDefinition(a) : undefined
+            e.usingSpecialAttack === true && (e.specialAttackItemId ?? a) !== undefined ? getSpecialAttackDefinition(e.specialAttackItemId ?? a) : undefined
           )?.animationId;
           this.pendingPlayerAttack = {
             kind: "weapon",
             weaponId: a,
             attackKind: e.attackKind,
+            ...(e.attackAnimationId !== undefined ? { attackAnimationId: e.attackAnimationId } : {}),
             ...(t !== undefined
               ? {
                   specAnimationId: t,
@@ -47565,6 +47881,8 @@ var SceneCompositor = class e {
           pitchSin: g,
           pitchCos: d,
         };
+        // The camera's part of the projection, kept for the lobby's remote players (LobbySceneCompositor).
+        this.sorterCamera = p;
         this.playerAnimController?.setSorterProjection({
           cameraX: p.cameraX,
           cameraY: p.cameraY,
@@ -47597,6 +47915,7 @@ var SceneCompositor = class e {
           pitchCos: p.pitchCos,
         });
       } else {
+        this.sorterCamera = null;
         this.playerAnimController?.setSorterProjection(null);
         this.npcInstanceManager.setSorterProjection(null);
         this.spotAnimRenderer.setSorterProjection(null);
@@ -47716,16 +48035,8 @@ var SceneCompositor = class e {
         this.playerAnimController?.posedModelHeight,
       );
     }
-    if (options.showAttackTimerMetronome) {
-      this.uiOverlayRenderer.LL(
-        n,
-        uiCamera,
-        simulationState,
-        N,
-        interpolatedTick ?? currentTick,
-        this.playerAnimController?.posedModelHeight,
-      );
-    }
+    // Attack Timer Metronome: what it draws, if anything, its store says (client/plugins/attackTimerMetronome.js).
+    this.uiOverlayRenderer.LL(n, uiCamera, simulationState, N);
     if (options.playerOverheadNumbers) {
       this.uiOverlayRenderer.DL(
         n,
@@ -54040,7 +54351,7 @@ var LobbyArenaRenderer = class {
 };
 function ME(e) {
   if (
-    !e.meshId.startsWith("player-model-") ||
+    !(e.meshId.startsWith("player-model-") || e.meshId.startsWith("remote-player-")) ||
     !e.meshId.endsWith("-transparent")
   ) {
     return e;
@@ -54121,6 +54432,7 @@ var LobbySceneCompositor = class extends SceneCompositor {
   }
   dispose() {
     super.dispose();
+    this.remotePlayers?.clear();
     this.forcedTerrain = null;
     this.celShadedCache.clear();
     this.footprintCache.clear();
@@ -54328,10 +54640,198 @@ var LobbySceneCompositor = class extends SceneCompositor {
       }
     })(this.npcInstanceManager, this.celShadedCache, this.footprintCache);
     this.renderNpcModels(n);
+    this.drawLobbyChat(n, e, a, this.drawRemotePlayers(n, e, a));
     if (e.options.showNpcClickbox) {
       this.FH(n);
     }
     return n;
+  }
+  // The other players of the lobby (client/net/remotePlayers.js): asked of the source each frame, none
+  // without one. Each has its own rig, built as the local player's is (buildPlayerRig), its own mesh ids,
+  // tracker and model matrix, and is drawn and sorted as the local player is.
+  drawRemotePlayers(n, e, a) {
+    const source = getRemotePlayersSource();
+    if (!source || !this.remotePlayerLoader || !this.playerAnimationSystem) {
+      this.remotePlayers?.clear();
+      return [];
+    }
+    this.remotePlayers ??= createRemotePlayers({
+      buildRig: (appearance, equipment, id) => this.buildRemotePlayerRig(appearance, equipment, id),
+      makeTracker: (x, y) => new PlayerVisualTracker(x, y),
+      isValidKit: (kit, bodyPart) => {
+        const k = this.remotePlayerLoader.identKitLoader.load(kit);
+        return !!k && k.bodyPartId >= 0 && k.bodyPartId % 7 === bodyPart && k.models.length > 0;
+      },
+      // A rig not drawn any more: its meshes are not pushed again, and the renderer frees their buffers when
+      // they go stale (its only release: no scene frees a mesh explicitly, NPC instances included).
+      releaseRig: (rig) => rig.release(),
+      now: () => performance.now(),
+      onError: (error, id) => logger.warn("Lobby", "A remote player could not be drawn" + (id === undefined ? "" : " (id " + id + ")"), error),
+    });
+    const deltaMs = e.frameDeltaMs ?? 0;
+    const local = this.playerModelMatrix;
+    const drawn = this.remotePlayers.update(source.list(), {
+      localPosition: e.simulationState.playerPosition,
+      deltaMs: deltaMs,
+      // For the remotes that keep facing us (Follow).
+      ownId: source.ownId ?? null,
+      localVisual: local ? [local[12] - 0.5, local[13] - 0.5] : null,
+    });
+    const camera = this.sorterCamera;
+    const uiCamera = overlayCamera(a, n, e.options?.overlayGameScale);
+    // The tiles a standing player was drawn on this frame, the local player's first.
+    const standingTiles = new Set();
+    if (local && Number.isInteger(local[12] - 0.5) && Number.isInteger(local[13] - 0.5)) {
+      standingTiles.add(local[12] - 0.5 + "," + (local[13] - 0.5));
+    }
+    for (const r of drawn) {
+      // One remote that fails is dropped (remotePlayers.js markBroken), never the frame.
+      try {
+        this.drawRemotePlayer(n, r, camera, uiCamera, deltaMs, standingTiles);
+      } catch (error) {
+        this.remotePlayers.markBroken(r.id, error);
+      }
+    }
+    return drawn;
+  }
+  // The lobby's public chat above the speakers' heads (client/net/lobbyChat.js): ours and the drawn remote
+  // players', as the overlay's other overhead texts, each frame; none without the lobby's chat.
+  drawLobbyChat(n, e, a, drawn) {
+    const uiCamera = overlayCamera(a, n, e.options?.overlayGameScale);
+    if (!uiCamera) {
+      return;
+    }
+    const now = Date.now();
+    const push = (key, point, text) => {
+      if (!point || !text) {
+        return;
+      }
+      n.overheadTexts ||= [];
+      // OBS (the game's client, drawActor2d): the text's baseline is 2 px under the point of the model's top. The
+      // overlay hangs the bottom of a 16 px line (baseline 4 px above it) on its point, so the point is 6 px lower;
+      // whole pixels, so the letters and their shadow are not smeared.
+      // bitmap: drawn as the game's client draws it, 1-bit glyphs with a hard shadow (client/net/overheadBitmap.js).
+      // inferred: 10 game pixels higher than that rule puts it (the maintainer's, 2026-11-27: the text stood too
+      // close to the head against the game). Not measured: to be replaced by a distance taken from a recording.
+      n.overheadTexts.push({ screenX: Math.round(point.x), screenY: Math.round(point.y) + 6 - 10, ...text, fontSize: UIOverlayRenderer.OSRS_OVERHEAD_TEXT_FONT_SIZE, key: key, bitmap: true });
+    };
+    // OBS (the game's client): the other players' texts first, then our own; a later one that overlaps is pushed up.
+    for (const r of drawn) {
+      push("lobby-chat-" + r.id, r.chatAnchor, lobbyChatOverheadText(r.id, now));
+    }
+    const own = lobbyChatOverheadText(null, now);
+    const center = this.lastPlayerVisualCenter;
+    if (own && center) {
+      push("lobby-chat-local", this.uiOverlayRenderer.playerChatAnchor(uiCamera, [center[0] - 0.5, center[1] - 0.5], this.playerAnimController?.posedModelHeight, this.xH() * 128), own);
+    }
+  }
+  drawRemotePlayer(n, r, camera, uiCamera, deltaMs, standingTiles) {
+    const { rig: rig, state: s } = r;
+    const ctrl = rig.controller;
+    const x = r.position[0] + 0.5;
+    const y = r.position[1] + 0.5;
+    const ground = -Nb(this.terrainHeights, x, y) / 128;
+    const angle = s?.facingAngle ?? r.facing;
+    if (ctrl) {
+      ctrl.stanceName = null;
+      ctrl.setSorterProjection(
+        camera
+          ? {
+              cameraX: camera.cameraX,
+              cameraY: camera.cameraY,
+              cameraZ: camera.cameraZ,
+              yawSin: camera.yawSin,
+              yawCos: camera.yawCos,
+              pitchSin: camera.pitchSin,
+              pitchCos: camera.pitchCos,
+              orientation: angle,
+              modelX: x * 128,
+              modelY: -(ground + (rig.minHeight + ctrl._w()) / 128) * 128,
+              modelZ: y * 128,
+            }
+          : null,
+      );
+      ctrl.updatePlayerAnimation({
+        deltaMs: deltaMs,
+        isMoving: !!s?.isVisuallyMoving,
+        simIsMoving: !!s?.simIsMoving,
+        isRunning: !!s?.isRunning,
+        locomotionState: s?.locomotionState ?? null,
+        visualAngle: angle,
+        targetAngle: s?.targetAngle ?? angle,
+        speedMultiplier: 1,
+        isTurning: !!s?.isTurning,
+      });
+    }
+    const z = ground + (rig.minHeight + (ctrl?._w() ?? 0)) / 128;
+    ctrl?.ZL(-z * 128);
+    this.createPlayerModelMatrix(1 / 128, x, y, z, angle, r.modelMatrix);
+    // OBS (the game's client, addPlayerToScene): a player standing on the middle of a tile is not drawn when another
+    // was drawn there this frame, the local player first; a player that is moving is always drawn. A player not
+    // drawn stays in the menu (its matrix and hit data are kept).
+    const standing = Number.isInteger(r.position[0]) && Number.isInteger(r.position[1]);
+    const key = r.position[0] + "," + r.position[1];
+    r.covered = standing && standingTiles.has(key);
+    if (standing) {
+      standingTiles.add(key);
+    }
+    if (!r.covered) {
+      for (const m of rig.meshCommands) {
+        n.commands.push(ME({ ...m, modelMatrix: r.modelMatrix }));
+      }
+    }
+    r.overheadAnchor = uiCamera
+      ? this.uiOverlayRenderer.playerOverheadBase(uiCamera, r.position, ctrl?.posedModelHeight)
+      : null;
+    r.chatAnchor = uiCamera ? this.uiOverlayRenderer.playerChatAnchor(uiCamera, r.position, ctrl?.posedModelHeight, rig.minHeight + (ctrl?._w() ?? 0)) : null;
+    // The screen point of the middle of the body (a pointer aimed at this player, as the tests aim).
+    r.screenCenter = uiCamera
+      ? uiCamera.tileToScreen({ x: x, y: y, level: ground + (ctrl?.posedModelHeight || 200) / 256 })
+      : null;
+  }
+  // One remote player's rig (buildPlayerRig with no controller to reuse), its meshes under its own ids.
+  buildRemotePlayerRig(appearance, equipment, id) {
+    const holder = { meshes: [], controller: null };
+    const rig = this.buildPlayerRig(
+      this.remotePlayerLoader,
+      appearance,
+      equipment,
+      null,
+      () => holder.controller?.buildPlayerAnimatedMesh() ?? null,
+      (e) => this.RD(e, holder.meshes),
+    );
+    if (!rig) {
+      return null;
+    }
+    this.remotePlayerMeshVersion = (this.remotePlayerMeshVersion ?? 0) + 1;
+    holder.meshes = this.PD(rig.meshData, `remote-player-${id}-v${this.remotePlayerMeshVersion}`);
+    holder.controller = rig.controller;
+    rig.controller?.applyInitialAnimationFrame();
+    const model = rig.modelData.mergedModel;
+    return {
+      meshCommands: holder.meshes,
+      controller: rig.controller,
+      minHeight: rig.minHeight,
+      // Nothing of this rig is uploaded or drawn again.
+      release: () => {
+        holder.controller = null;
+        holder.meshes = [];
+      },
+      hitModel: {
+        verticesX: model.verticesX,
+        verticesY: model.verticesY,
+        verticesZ: model.verticesZ,
+        verticesCount: model.verticesCount,
+        indices1: model.indices1,
+        indices2: model.indices2,
+        indices3: model.indices3,
+        faceCount: model.faceCount,
+        faceColors3: null,
+      },
+    };
+  }
+  getRemotePlayerHitTestData() {
+    return this.remotePlayers?.hitTestData() ?? [];
   }
   getAllNpcHitTestData() {
     return super
@@ -54410,7 +54910,7 @@ var LobbySceneBuilder = class {
     return this.compositor.build(e, a, t);
   }
   async loadTerrain(e, a, t, n, s, r, i) {
-    const l = await this.cacheManager.rM(25, 73);
+    const l = await this.cacheManager.loadAdditionalMapSquare(25, 73);
     this.compositor.setForcedTerrain(l.terrain);
     const o = l.locations ?? undefined;
     const d = o?.map((e) => e.location);
@@ -54433,7 +54933,7 @@ var LobbySceneBuilder = class {
     // The gateways' objects are the only ones the lobby shows. Without them
     // the lobby still works, so a failure here is logged and not thrown.
     try {
-      const loader = this.cacheManager.wd();
+      const loader = this.cacheManager.getLocModelLoader();
       loader.setTextureLayerResolver(re.resolve);
       this.compositor.gatewayObjects = await loadGatewayObjects(LocRenderer, loader, this.compositor.terrainHeights);
     } catch (e) {
@@ -54458,6 +54958,13 @@ var LobbySceneBuilder = class {
     return this.npcLoaded;
   }
   async loadPlayer(e, a, t) {
+    // The remote players' rigs are built by a loader of their own over the same cache loaders, so their
+    // looks never take the local player's models out of its loader's model cache.
+    if (this.compositor.remotePlayerLoaderSource !== e) {
+      this.compositor.remotePlayerLoaderSource = e;
+      this.compositor.remotePlayerLoader =
+        e instanceof Rh ? new Rh(e.objTypeLoader, e.identKitLoader, e.modelLoader) : e;
+    }
     await this.compositor.loadPlayer(e, a, t);
   }
   isPlayerLoaded() {
@@ -54471,6 +54978,9 @@ var LobbySceneBuilder = class {
   }
   getResidentMeshSources() {
     return this.compositor.getResidentMeshSources();
+  }
+  getRemotePlayerHitTestData() {
+    return this.compositor.getRemotePlayerHitTestData();
   }
   async loadLocs(e, a) {}
   isLocsLoaded() {
@@ -57734,6 +58244,9 @@ var iV = {
 import { presentationBuilders } from "../encounters/presentations.js";
 import {scaleToaAccuracyRoll} from "/toa/zebak/rules.js";
 import {gatewayMeshes, gatewayPortals, gatewayCovers, gatewayFloor, extendLobbyArena, loadGatewayObjects, drawGatewayObjects} from "/lobby/gateways.js";
+import {createRemotePlayers, getRemotePlayersSource, localFaceAngle} from "/net/remotePlayers.js";
+import {lobbyChatOverheadText} from "/net/lobbyChat.js";
+import {drawOverheadBitmapTexts} from "/net/overheadBitmap.js";
 import {toaFragmentShader} from "/toa/shader.js";
 import {getAttackRangeOverlay} from "/plugins/attackRanges.js";
 import {overrideProjectile} from "/plugins/projectileOverride.js";
@@ -57741,6 +58254,8 @@ import {overrideProjectile} from "/plugins/projectileOverride.js";
 import {getBlindfold} from "/plugins/blindfold.js";
 import {getSkyboxColor} from "/plugins/skybox.js";
 import {getDefenceOverhead} from "/plugins/defenceTracker.js";
+// The plugin Attack Timer Metronome (client/plugins/attackTimerMetronome.js): its number over the player and its bar.
+import {getAttackTimerNumber, getAttackTimerBar, tickHeights} from "/plugins/attackTimerMetronome.js";
 import {dt2FragmentShader} from "/dt2/shader.js";
 import {lobbyFragmentShader} from "/lobby/shader.js";
 import { LobbyEncounter } from "../encounters/lobby/LobbyEncounter.js";
@@ -60073,7 +60588,7 @@ var rZ = class {
 function iZ(e, a) {
   const t = a.segments && a.segments.length > 0 ? a.segments : null;
   const n = t
-    ? `s:${t.map((e) => `${e.color ?? ""}\0${e.icon ?? ""}\0${e.text}`).join("")}`
+    ? `s:${t.map((e) => `${e.color ?? ""}\0${e.icon ?? ""}\0${e.dx ?? ""},${e.dy ?? ""}\0${e.text}`).join("")}`
     : `t:${a.text}`;
   if (e.dataset.content !== n) {
     e.dataset.content = n;
@@ -60093,6 +60608,12 @@ function iZ(e, a) {
         if (a.color) {
           t.style.color = a.color;
         }
+        // A character moved off its place (the lobby's chat effects, client/net/chatEffects.js).
+        if (a.dx || a.dy) {
+          t.style.position = "relative";
+          t.style.left = `${a.dx ?? 0}px`;
+          t.style.top = `${a.dy ?? 0}px`;
+        }
         e.appendChild(t);
       }
     } else {
@@ -60104,7 +60625,9 @@ var lZ = {
   damage: "/assets/ui/hitsplat-damage.png",
   block: "/assets/ui/hitsplat-block.png",
   poison: "/assets/ui/hitsplat-poison.png",
-  venom: "/assets/ui/hitsplat-poison.png",
+  // CACHE: hitsplat 5, sprite 1632 (venom); hitsplat 4, sprite 1633 (disease).
+  venom: "/assets/ui/hitsplat-venom.png",
+  disease: "/assets/ui/hitsplat-disease.png",
   heal: "/assets/ui/hitsplat-heal.png",
   doom: "/assets/ui/hitsplat-doom-skull.png",
   burn: "/assets/ui/hitsplat-burn.png",
@@ -60149,7 +60672,6 @@ var dZ = ({
   onCameraChange: onCameraChange,
   speedMultiplier: T = 1,
   playerOverheadNumbers: playerOverheadNumbers,
-  showAttackTimerMetronome: C = false,
   showNpcAttackTimerMetronome: x = false,
   hdHealthBars: hdHealthBars,
   entityHider: B = null,
@@ -60381,6 +60903,7 @@ var dZ = ({
         s.style.top = `${n.screenY}px`;
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
+        s.style.fontFamily = n.fontFamily ?? "'RuneScape Small', monospace"; // Attack Timer Metronome's Font Type
       }
     } else if (t) {
       t.remove();
@@ -60392,6 +60915,8 @@ var dZ = ({
       return;
     }
     let t = current21.querySelector("[data-overhead-texts]");
+    // The lobby's chat is drawn on a canvas (client/net/overheadBitmap.js); its spans stay, unseen, while it is.
+    const bitmapDrawn = drawOverheadBitmapTexts(current21, e, Hy);
     if (e.length !== 0) {
       for (
         t ||
@@ -60433,6 +60958,8 @@ var dZ = ({
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
         s.style.transform = n.transform ?? "translate(-50%, -100%)"; // Defence Tracker says how its text hangs from its point
+        s.style.clipPath = n.clipPath ?? ""; // the lobby's chat effects cut their text to a window
+        s.style.visibility = n.bitmap && bitmapDrawn ? "hidden" : "";
         iZ(s, n);
       }
     } else if (t) {
@@ -60504,10 +61031,6 @@ var dZ = ({
         if (r && r.getAttribute("data-sprite") !== l) {
           r.src = l;
           r.setAttribute("data-sprite", l);
-        }
-        if (r) {
-          r.style.filter =
-            n.type === "venom" ? "brightness(0.55) saturate(1.15)" : "none";
         }
         s.style.width = `${n.width}px`;
         s.style.height = `${n.height}px`;
@@ -60771,8 +61294,6 @@ var dZ = ({
   ha.current = T;
   const fa = (0, pn.useRef)(playerOverheadNumbers);
   fa.current = playerOverheadNumbers;
-  const ua = (0, pn.useRef)(C);
-  ua.current = C;
   const va = (0, pn.useRef)(x);
   va.current = x;
   const hdHealthBarsRef = (0, pn.useRef)(hdHealthBars);
@@ -60915,7 +61436,6 @@ var dZ = ({
           lineMarkerWidth: Ve.current,
           smoothTerrain: false,
           playerOverheadNumbers: fa.current,
-          showAttackTimerMetronome: ua.current,
           showNpcAttackTimerMetronome: va.current,
           entityHider: pa.current,
           tzhaarHpTracker: ka.current,
@@ -61357,7 +61877,6 @@ var bZ = ({
   fpsCap: q = 0,
   speedMultiplier: Z = 1,
   playerOverheadNumbers: playerOverheadNumbers,
-  showAttackTimerMetronome: X = false,
   showNpcAttackTimerMetronome: J = false,
   hdHealthBars: hdHealthBars,
   overlayGameScale: overlayGameScale = 1,
@@ -61524,7 +62043,6 @@ var bZ = ({
   const Ya = (0, pn.useRef)(y);
   const Xa = (0, pn.useRef)(Z);
   const Ja = (0, pn.useRef)(playerOverheadNumbers);
-  const Qa = (0, pn.useRef)(X);
   const et = (0, pn.useRef)(J);
   const hdHealthBarsRef = (0, pn.useRef)(hdHealthBars);
   const overlayGameScaleRef = (0, pn.useRef)(overlayGameScale);
@@ -61664,9 +62182,6 @@ var bZ = ({
   (0, pn.useEffect)(() => {
     Ja.current = playerOverheadNumbers;
   }, [playerOverheadNumbers]);
-  (0, pn.useEffect)(() => {
-    Qa.current = X;
-  }, [X]);
   (0, pn.useEffect)(() => {
     et.current = J;
   }, [J]);
@@ -62289,6 +62804,7 @@ var bZ = ({
         s.style.top = `${n.screenY}px`;
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
+        s.style.fontFamily = n.fontFamily ?? "'RuneScape Small', monospace"; // Attack Timer Metronome's Font Type
       }
     } else if (t) {
       t.remove();
@@ -62300,6 +62816,8 @@ var bZ = ({
       return;
     }
     let t = current49.querySelector("[data-overhead-texts]");
+    // The lobby's chat is drawn on a canvas (client/net/overheadBitmap.js); its spans stay, unseen, while it is.
+    const bitmapDrawn = drawOverheadBitmapTexts(current49, e, Hy);
     if (e.length !== 0) {
       for (
         t ||
@@ -62341,6 +62859,8 @@ var bZ = ({
         s.style.color = n.textColor;
         s.style.fontSize = `${n.fontSize}px`;
         s.style.transform = n.transform ?? "translate(-50%, -100%)"; // Defence Tracker says how its text hangs from its point
+        s.style.clipPath = n.clipPath ?? ""; // the lobby's chat effects cut their text to a window
+        s.style.visibility = n.bitmap && bitmapDrawn ? "hidden" : "";
         iZ(s, n);
       }
     } else if (t) {
@@ -62414,13 +62934,6 @@ var bZ = ({
         if (r && r.getAttribute("data-sprite") !== l) {
           r.src = l;
           r.setAttribute("data-sprite", l);
-        }
-        if (r) {
-          const e =
-            n.type === "venom" ? "brightness(0.55) saturate(1.15)" : "none";
-          if (r.style.filter !== e) {
-            r.style.filter = e;
-          }
         }
         const o = `${n.width}px`;
         const d = `${n.height}px`;
@@ -62900,6 +63413,18 @@ var bZ = ({
       } else if (R) {
         P = tracker2.snapToUnwalkedPlacement(h.playerPosition, h.playerFacingAngle);
       }
+      // Follow in the lobby (client/net/remotePlayers.js localFaceAngle): the follower faces its leader
+      // every frame, walking too, and is not slowed while it turns; null everywhere else.
+      const lobbyFace = n ? null : localFaceAngle([tracker2.worldXFloat / 128, tracker2.worldYFloat / 128], tracker2.currentTurnTarget());
+      if (lobbyFace !== null) {
+        aa.current.lobbyFacing = true;
+        tracker2.setInteracting(true);
+        tracker2.setForcedFacingAngle(lobbyFace);
+      } else if (aa.current.lobbyFacing) {
+        aa.current.lobbyFacing = false;
+        tracker2.setInteracting(!!h.attackTarget);
+        tracker2.setForcedFacingAngle(h.attackTarget ? h.playerFacingAngle : null);
+      }
       const _ = Qe.current.getPrimaryAnimMovementBlock?.() ?? {
         blocksRunning: false,
         blocksWalking: false,
@@ -63059,7 +63584,6 @@ var bZ = ({
           lineMarkerWidth: Va.current,
           smoothTerrain: Ka.current,
           playerOverheadNumbers: Ja.current,
-          showAttackTimerMetronome: Qa.current,
           showNpcAttackTimerMetronome: et.current,
           entityHider: at.current,
           tzhaarHpTracker: tt.current,
@@ -63879,8 +64403,10 @@ var AZ = new Float64Array(16);
 var LZ = new Float64Array(16);
 var DZ = new Float64Array(0);
 var HZ = new Float64Array(0);
-function MZ(e, a, t, n, s, r) {
-  if (a.useBoundingBox === true) {
+// `boxOnly`: whether the pointer is over the model's box alone, the test the
+// game makes before it looks at a larger model's faces (below).
+function MZ(e, a, t, n, s, r, boxOnly = false) {
+  if (a.useBoundingBox === true || boxOnly) {
     return (function (e, a, t, n, s, r) {
       const {
         verticesX: verticesX,
@@ -63892,12 +64418,14 @@ function MZ(e, a, t, n, s, r) {
       if (verticesCount === 0) {
         return null;
       }
-      let c = Number.POSITIVE_INFINITY;
-      let m = Number.POSITIVE_INFINITY;
-      let h = Number.POSITIVE_INFINITY;
-      let f = Number.NEGATIVE_INFINITY;
-      let u = Number.NEGATIVE_INFINITY;
-      let v = Number.NEGATIVE_INFINITY;
+      // The game's box of a larger model takes in its origin: its minimum
+      // and maximum start there.
+      let c = boxOnly ? modelMatrix[12] : Number.POSITIVE_INFINITY;
+      let m = boxOnly ? modelMatrix[13] : Number.POSITIVE_INFINITY;
+      let h = boxOnly ? modelMatrix[14] : Number.POSITIVE_INFINITY;
+      let f = boxOnly ? modelMatrix[12] : Number.NEGATIVE_INFINITY;
+      let u = boxOnly ? modelMatrix[13] : Number.NEGATIVE_INFINITY;
+      let v = boxOnly ? modelMatrix[14] : Number.NEGATIVE_INFINITY;
       for (let e = 0; e < verticesCount; e++) {
         const a = verticesX[e];
         const t = verticesY[e];
@@ -63939,8 +64467,8 @@ function MZ(e, a, t, n, s, r) {
       const p = (c + f) / 2;
       const k = (m + u) / 2;
       const S = (h + v) / 2;
-      const b = Math.max((f - c) / 2, zZ) + wZ;
-      const y = Math.max((u - m) / 2, zZ) + wZ;
+      const b = Math.max((f - c) / 2, zZ) + (boxOnly ? 0 : wZ);
+      const y = Math.max((u - m) / 2, zZ) + (boxOnly ? 0 : wZ);
       const z = (v - h) / 2;
       const w = new Float64Array(16);
       for (let e = 0; e < 4; e++) {
@@ -63993,6 +64521,15 @@ function MZ(e, a, t, n, s, r) {
         return null;
       }
     })(e, a, t, n, s, r);
+  }
+  // A larger model: the game looks at its faces only when the pointer is over
+  // its box, and then takes each face's rectangle on screen, 5 pixels wider
+  // on each side (RuneLite's Perspective.getClickbox, which clips the faces'
+  // rectangles to that box). Without the box, the rectangles of the faces at
+  // a model's edge reached past it, onto tiles beside Vardorvis or Araxxor
+  // that the player should be able to click.
+  if (MZ(e, a, t, n, s, r, true) === null) {
+    return null;
   }
   const {
     verticesX: verticesX,

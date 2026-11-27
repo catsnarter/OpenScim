@@ -539,7 +539,7 @@ class AlchemicalHydraEncounter {
     const kind = phases[this.phase].special;
     if (kind === "fire") {
       // WIKI: it walks to the middle first; the breaths carry their own sequences.
-      this.fire.start(context);
+      this.fire.start(boss, context);
       return;
     }
     faceActorToward(boss, player);
@@ -553,6 +553,9 @@ class AlchemicalHydraEncounter {
     return {
       // WIKI: 75% less damage while shielded.
       playerDamageOnNpc: (damage, { target, attack }) => (target.id === bossActorId && this.shielded ? this.shieldHit(damage, target, attack) : damage),
+      // The same at launch, which the experience and the XP drop's hit are given from: the game gives them for what the
+      // shield lets through (the play-test of 2026-11-26: the drops' hits were four times the hitsplats).
+      predictPlayerDamageOnNpc: (damage, { target }) => (target.id === bossActorId && this.shielded ? Math.floor(damage * shieldedShare) : damage),
     };
   }
   // A hit on its shield: what is left of it. WIKI: the "BGS spec applies before Hydra's 75% damage reduction": the engine
@@ -673,6 +676,14 @@ export const alchemicalHydraDefinition = {
     kind: alchemicalHydraKind,
     displayName: "Alchemical Hydra",
     description: "The Karuulm Slayer Dungeon: three-attack style switches, its shield and the vents that take it away, and the poison, lightning and fire of its four forms.",
+    // The texts of the page for search engines (client/seo/routes.js).
+    seo: {
+      title: "OSRS Alchemical Hydra Simulator",
+      description: "Practice the Alchemical Hydra in your browser: the style switch every three attacks, the vents that remove its shield, and the poison, lightning and fire of its four forms.",
+      h1: "Alchemical Hydra Simulator",
+      intro: "The Alchemical Hydra is a Slayer boss in OSRS, found in the Karuulm Slayer Dungeon. This sim covers the switch of style after every three attacks, its shield and the vents that take it away, and the poison, lightning and fire of its four forms.",
+      keywords: ["OSRS Alchemical Hydra", "Alchemical Hydra simulator", "Hydra simulator", "Hydra practice", "OSRS Slayer boss simulator"],
+    },
     mapSquare: alchemicalHydraMapSquare,
     playerStart,
     loadsMapLocs: true,

@@ -6,13 +6,11 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 import { serveFixture } from "./fixtures/register.mjs";
 
-const origin = "http://127.0.0.1:8791";
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const origin = process.env.TEST_ORIGIN;
+const browser = await chromium.launch(browserOptions);
 
 try {
   // The site as it ships: the fixture's route leads to the lobby.
@@ -34,7 +32,7 @@ try {
   for (const [path, marker, probe] of [
     ["**/engine/SimulationEngine.js*", "this.encounter = options.encounter;", "if (options.encounter.kind === 'training_ground') window.engine = this;"],
     ["**/encounters/shared/buildScene.js*", "const scene = new Scene();", "window.scene = scene;"],
-    ["**/assets/application.js*", "var eve = \"Check your gear, then press Start.\";", "window.tilePresetsOf = Qbe; window.whatsNew = Ibe;"],
+    ["**/assets/application.js*", "var CHECK_GEAR = \"Check your gear, then press Start.\";", "window.tilePresetsOf = Qbe; window.whatsNew = Ibe;"],
   ]) {
     await page.route(path, async (route) => {
       const response = await route.fetch();
@@ -45,7 +43,7 @@ try {
   }
 
   // The route: the kind with "-" for "_" (engine/encounterKinds.js), and a page title from
-  // the descriptor's `seo`: application.js has no entry for the kind.
+  // the descriptor's `seo` (client/seo/routes.js).
   await page.goto(origin + "/training-ground/");
   await page.waitForFunction(() => window.engine && window.scene, null, { timeout: 60000 });
   await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 60000 });

@@ -28,15 +28,16 @@
 // (runelogs): fourteen combat logs of the fight on runelogs.com, ten of them
 // kills, from two accounts, May 2025 to September 2026 (RuneLite's combat
 // logger: hitsplats, prayers, boosted levels, positions and NPC changes a
-// tick at a time; no animations, graphics, projectiles or messages). Where a
-// log and another source disagree, the log is followed and the other named.
-// Numbers no source gives are marked inferred. There are no Outside
-// recordings of it yet.
+// tick at a time; no animations, graphics, projectiles or messages). OBS
+// (Outside): one Outside recording of a kill (ids.js), with her animations,
+// graphics, NPC tiles and messages. Where a log and another source disagree,
+// the log is followed and the other named. Numbers no source gives are marked
+// inferred.
 //
-// Not yet: the dream's way in (the Pool of Nightmares, her countdown and her
-// waking); the totems' overlay and her bar in the boss interface (her shield
-// is the blue bar over her, a totem's charge left to go its own bar); the
-// flies' and the flowers' heal on a totem; a team's fight.
+// Not yet: the Pool of Nightmares in the Sanctuary (the run starts in the
+// dream, as the player arrives); the totems' overlay (OBS (Outside): interface
+// 413, open from her shield failing to her blast form); the flies' and the flowers' heal on a totem; a team's fight; the hitsplats of her shield and of a totem's charge
+// (OBS (Outside): the game's own, 18 and 22 for the player's, not the damage one; the engine draws damage).
 import { getMonsterFormulaStats, getMonsterHitpoints } from "../../engine/monsterStats.js";
 import { createSeededRandom } from "../../engine/random.js";
 import { getWeaponFormulaStyle } from "../../engine/weapons.js";
@@ -50,7 +51,7 @@ import {
   mapSquare, bossSize, bossStart, playerStart, npcTypeIds, formCycle, totems as totemSpecs, isFloor, floorBounds,
   gapTo, footprintTiles, chebyshev, spotAnims, sounds,
 } from "./ids.js";
-import { Specials, drowsyAttackDelay, runCounts } from "./specials.js";
+import { Specials, drowsyAttackDelay, curseStops } from "./specials.js";
 import { Minions, totemDefinition, huskDefinition, parasiteDefinition, sleepwalkerDefinition, sleepwalkerCounts } from "./minions.js";
 import { phosanisNightmareLoadouts } from "./loadouts.js";
 
@@ -66,17 +67,31 @@ const phases = 3; // WIKI, tsps; OBS (runelogs): three since 2025 (a log of May 
 const blastShare = Math.floor(hitpoints / 3);
 const desperationHp = 150; // WIKI, tsps; OBS (runelogs): 150 dealt in it, every kill
 const attackTicks = 6; // WIKI, TABLE, tsps; OBS (runelogs): her hits on the player 6 ticks apart
-const firstAttackTicks = 2; // tsps: a phase's first attack two ticks after her form
+// tsps: a phase's first attack two ticks after her form. OBS (Outside): two after she wakes, but one after she takes
+// her form again after a blast (both times).
+const firstAttackTicks = { woken: 2, afterBlast: 1 };
+// OBS (Outside), from the tick the player arrives in the dream: "The Nightmare will awaken in 10 seconds!" 3 ticks
+// in, "... in 5 seconds!" 12, "The Nightmare has awoken!" and her waking animation 19, her first form 27, so her
+// first attack 29. Asleep she cannot be attacked (inferred: she has no Attack option, and the player's first attack
+// came after her form).
+const wakeTimes = { tenSeconds: 3, fiveSeconds: 12, awoken: 19, form: 27 };
 const maxHits = { melee: 73, magic: 80, range: 80 }; // WIKI (the recordings of tsps are of Leagues worlds)
 // tsps: melee for 4 of 88 of her attacks with the player in reach in her first
 // phases, 10 of 29 in her last (WIKI: "an increased chance to use melee").
+// OBS (Outside): 1 of 22 in her first two, 4 of 14 in her last.
 const meleeChance = { early: 0.08, last: 0.34 };
 const hitTicks = { magic: 4, range: 4, melee: 2 }; // tsps
 // tsps: the projectiles leave 3 ticks after her animation and land 30 (magic) or
 // 20 (ranged) cycles after that, and a cycle more a tile from her middle tile.
 const flight = { leaves: 90, base: { magic: 30, range: 20 }, startHeight: 86, endHeight: 31, slope: 14, startOffset: 96 };
-// inferred (WIKI: "The boss roots during magic and ranged animations"): no step on the tick of the animation or the next.
-const rootTicks = 2;
+// OBS (Outside, five recordings, her tile and target a tick at a time): after each of her animations she takes no step
+// for this many ticks, the animation's tick included (her magic and ranged: never sooner than 5 in 90, her melee 4 in
+// 25, her claws 9 in 23, her curse, spores, husks and parasite 5 in 41), and does not turn to the player until a tick
+// before that (her target cleared, then set again: magic and ranged 4 ticks after 170 times of 173, melee 3 of 25,
+// claws 8 of 23). WIKI: "The boss roots during magic and ranged animations".
+const rootAfter = { magic: 5, range: 5, melee: 4, claws: 9, husks: 5, parasite: 5, curse: 5, spores: 5 };
+// OBS (Outside): asleep she faces south (orientation 0) and targets nobody, until she takes her first form.
+const asleepFacing = 0;
 // tsps: one to five standard attacks between specials, a third of them (35%) her claws.
 const specialGap = [1, 5];
 const clawShare = 0.35;
@@ -96,8 +111,23 @@ const messages = {
   noEffect: "Your attacks have no effect on the Nightmare.",
   survives: { text: "The Nightmare survives the blast!", color: "#ff3045" },
   lashes: { text: "The Nightmare lashes out to survive.", color: "#ff3045" },
+  // OBS (Outside)
+  tenSeconds: "The Nightmare will awaken in 10 seconds!",
+  fiveSeconds: "The Nightmare will awaken in 5 seconds!",
+  awoken: { text: "The Nightmare has awoken!", color: "#ff3045" },
 }; // tsps, as captured
 const protectionPrayers = { magic: "ProtectMagic", range: "ProtectRange", melee: "ProtectMelee" };
+// WIKI (Phosani's Nightmare, Curse): "A pink glow fills the player's screen". OBS (a player's video of the game, fixed
+// mode, 2026-11-27, 30 frames a second): the game view alone turns pink, evenly, from nothing to its strongest over
+// about 1.15 seconds, and is gone the next frame; at its strongest about rgb(243, 0, 98) over the scene at 53%
+// (worked out from the view's mean colour before and at the peak). Here 2 ticks from the curse's message (inferred:
+// the video shows no message), fading in over them. The recordings carry no screen effect.
+const curseTint = { color: "rgba(243, 0, 98, 0.53)", fadeInMs: 1150, ticks: 2 };
+// A practice aid (off unless chosen): while cursed, each protection prayer outlined in the colour of the style it stops
+// now, green ranged, blue magic, red melee, as players mark them with RuneLite's Screen Markers.
+const curseMarkersKey = "phosaniCurseMarkers";
+const styleColours = { range: "#20e020", magic: "#2f8fff", melee: "#ff3030" };
+const curseMarkers = () => Object.fromEntries(Object.entries(curseStops).map(([prayer, stops]) => [protectionPrayers[prayer], styleColours[stops]]));
 
 const bossDefinition = defineNpc({
   id: "phosanis-nightmare",
@@ -135,15 +165,35 @@ class PhosanisNightmareEncounter {
     const start = Math.floor(this.random() * formCycle.length);
     this.forms = [0, 1, 2].map((n) => formCycle[(start + n) % formCycle.length]);
     this.phase = 1;
-    this.stage = "shield";
+    this.stage = "asleep";
     this.shield = shieldMax;
-    this.nextAttackAt = firstAttackTicks;
+    this.nextAttackAt = wakeTimes.form + firstAttackTicks.woken;
     this.stillUntil = 0;
+    this.heldFacing = asleepFacing; // the way she faces while she does not turn to the player
+    this.facingHeldUntil = 0;
     this.away = false;
     this.melee = []; // her melee in the air: { at, from }
     this.specials.reset();
     this.minions.reset();
     this.startSpecials();
+    this.later(wakeTimes.tenSeconds, (context) => this.message(context, messages.tenSeconds));
+    this.later(wakeTimes.fiveSeconds, (context) => this.message(context, messages.fiveSeconds));
+    this.later(wakeTimes.awoken, (context) => {
+      this.message(context, messages.awoken);
+      this.visual(context, { animations: [{ clipId: "wake" }] });
+    });
+    this.later(wakeTimes.form, (context) => this.wake(context));
+  }
+  // Her first form: her shield up, and her attacks.
+  wake(context) {
+    if (this.stage !== "asleep") return;
+    this.stage = "shield";
+    const boss = this.boss(context.world);
+    if (!boss) return;
+    boss.npcTypeId = this.form();
+    boss.untargetable = false;
+    boss.combat.nextActionTick = this.nextAttackAt;
+    this.updateFacing(boss, context.tick);
   }
   randomInt(low, high) {
     return low + Math.floor(this.random() * (high - low + 1));
@@ -161,7 +211,7 @@ class PhosanisNightmareEncounter {
     return { encounterSeed: this.seed };
   }
   getDefaultMechanicsConfig() {
-    return {};
+    return { [curseMarkersKey]: false };
   }
   getDefaultPlayerStart() {
     return [...playerStart];
@@ -185,8 +235,9 @@ class PhosanisNightmareEncounter {
   }
   bossBase() {
     return {
-      npcTypeId: this.forms[0], formulaStats: structuredClone(getMonsterFormulaStats(this.forms[0])),
-      position: [...bossStart], previousPosition: [...bossStart], untargetable: false, shieldBar: { ratio: 1 },
+      npcTypeId: npcTypeIds.asleep, formulaStats: structuredClone(getMonsterFormulaStats(this.forms[0])),
+      position: [...bossStart], previousPosition: [...bossStart], untargetable: true, shieldBar: undefined,
+      facing: asleepFacing, lockedFacing: asleepFacing, crawlMovement: undefined,
       vitals: { hp: hitpoints, maxHp: hitpoints },
     };
   }
@@ -200,7 +251,7 @@ class PhosanisNightmareEncounter {
           combat: {
             // attackRange: she walks to stand beside the player (OBS (runelogs): 171 of 398 of her logged tiles a tile
             // from him, a step at most a tick); her magic and ranged reach him anywhere.
-            attackSpeed: attackTicks, attackRange: 1, attackStyle: "magic", nextActionTick: firstAttackTicks, targetId: "player", lastAttackTick: null,
+            attackSpeed: attackTicks, attackRange: 1, attackStyle: "magic", nextActionTick: wakeTimes.form + firstAttackTicks.woken, targetId: "player", lastAttackTick: null,
             animations: { idle: null, walk: null, run: null, attack: null, death: null },
           },
         },
@@ -214,11 +265,13 @@ class PhosanisNightmareEncounter {
   // Before the NPCs: what is due, the claws coming up, the spores, the
   // parasite, the sleepwalkers beside her (tsps: taken in before they would
   // step), the yawns and the curse.
-  resolveHazards(context) {
+  resolveHazards(context, mechanics) {
     this.now = context.tick;
     this.world = context.world;
     this.context = context;
+    this.mechanics = mechanics;
     this.runTasks(context);
+    this.minions.refuseCharged(context);
     if (this.stage !== "dead") {
       this.specials.stepRun(context);
       this.specials.clawHits(context);
@@ -243,7 +296,10 @@ class PhosanisNightmareEncounter {
       this.specials.flies(context);
     }
     const boss = this.boss(context.world);
-    if (boss) boss.shieldBar = this.stage === "shield" && boss.alive ? { ratio: this.shield / shieldMax } : undefined;
+    // The blue bar over her, and with its points the boss bar's (OBS (Outside): the game's boss bar shows her shield
+    // out of 400 while it is up).
+    if (boss) boss.shieldBar = this.stage === "shield" && boss.alive ? { ratio: this.shield / shieldMax, value: this.shield, max: shieldMax } : undefined;
+    if (boss) this.updateFacing(boss, context.tick);
     return this.drainPending(context);
   }
   runTasks(context) {
@@ -285,21 +341,42 @@ class PhosanisNightmareEncounter {
   moveBoss(boss, context) {
     this.now = context.tick;
     this.world = context.world;
-    if (!boss.alive || this.away || context.tick < this.stillUntil) return [];
+    // OBS (Outside, five recordings): no step through a run of her claws (her flowers', her spores', her desperation's).
+    if (!boss.alive || this.away || context.tick < this.stillUntil || this.specials.run) return [];
     if (this.stage !== "shield" && this.stage !== "totems" && this.stage !== "desperate") return [];
     if (!context.world.getPlayer().alive) return [];
     return getNpcPursuitMoves(boss, { ...context, random: this.random });
   }
-  // She leaves (her flowers and her surge start so): out of reach until she is back.
+  // She stands, and does not turn to the player, for `ticks` from this one (rootAfter), facing as she does now.
+  root(boss, tick, ticks) {
+    this.stillUntil = Math.max(this.stillUntil, tick + ticks);
+    this.holdFacing(boss, tick + ticks - 1);
+  }
+  holdFacing(boss, until) {
+    this.heldFacing = boss.facing;
+    this.facingHeldUntil = Math.max(this.facingHeldUntil, until);
+  }
+  // The scene turns her to the player unless her facing is locked. OBS (Outside): asleep she faces south; away, at her
+  // surge's lane, through a run of her claws and while rooted after an animation she has no target and keeps her facing
+  // (her surge: along the lane, 7 of 7).
+  updateFacing(boss, tick) {
+    const held = this.stage === "asleep" || this.away || this.specials.surge !== null || this.specials.run !== null || tick < this.facingHeldUntil;
+    if (held) boss.lockedFacing = this.stage === "asleep" ? asleepFacing : this.heldFacing;
+    else delete boss.lockedFacing;
+  }
+  // She leaves (her flowers and her surge start so): still until she is back, but not out of reach. OBS (Outside, five
+  // recordings, 17 leaves for her flowers or surge): 4 times the player began an attack 1 or 2 ticks into her animation
+  // (a thrall once more) and it landed on her shield; Don Danz's broke it so 2 ticks in (her surge, 2026-11-26, 329).
   leave(context) {
     const boss = this.boss(context.world);
     if (!boss) return;
     this.away = true;
-    boss.untargetable = true;
+    this.holdFacing(boss, context.tick);
     this.visual(context, { animations: [{ clipId: "leave" }] });
   }
-  // Back: at the centre, or at a lane's start facing along it.
-  comeBack(context, at = bossStart, facing = null) {
+  // Back: at the centre, or at a lane's start facing along it (her surge: still until she crosses), or there with her
+  // surge nulled (`free`: she goes for the player at once).
+  comeBack(context, at = bossStart, facing = null, free = false) {
     const boss = this.boss(context.world);
     if (!boss) return;
     boss.position = [...at];
@@ -307,16 +384,23 @@ class PhosanisNightmareEncounter {
     boss.movementPath = [];
     boss.untargetable = false;
     if (facing) faceActorToward(boss, { position: facing, size: bossSize });
-    this.away = facing !== null; // her surge: still until she crosses
-    if (!facing) this.stillUntil = Math.max(this.stillUntil, context.tick + 4); // tsps: still until the segment animation
+    this.away = facing !== null && !free;
+    if (!facing) this.root(boss, context.tick, 4); // tsps: still until the segment animation
+    else this.holdFacing(boss, context.tick);
     this.visual(context, { animations: [{ clipId: "back" }] });
   }
+  // OBS (Outside, 7 surges): she slides along the lane as her surge animation plays (Don Danz, 2026-11-25: 87% of the
+  // way a tick in, at the end the next), facing along it; her first step 4 ticks after, her target back 3 after. The
+  // scene slides her over 2 ticks (crawlMovement).
   crossTo(context, to) {
     const boss = this.boss(context.world);
     if (!boss) return;
-    boss.previousPosition = [...boss.position];
+    const from = [...boss.position];
+    boss.previousPosition = [...to];
     boss.position = [...to];
+    boss.crawlMovement = { from, to: [...to], startTick: context.tick };
     this.away = false;
+    this.root(boss, context.tick, 4);
     this.visual(context, { animations: [{ clipId: "surge" }] });
   }
 
@@ -332,10 +416,10 @@ class PhosanisNightmareEncounter {
     boss.combat.nextActionTick = this.nextAttackAt;
     boss.combat.lastAttackTick = context.tick;
     if (this.stage === "desperate") {
-      // tsps: her claws on and on (specials.js: a run starts the next as it ends).
+      // tsps: her claws on and on. OBS (Outside, two recordings to her death): one run without end, a set every 5 ticks.
       if (!this.specials.run && !this.despRunning) {
         this.despRunning = true;
-        this.specials.startRun(context, runCounts.flowers, true);
+        this.specials.startRun(context, Infinity);
       }
       return idle;
     }
@@ -343,6 +427,7 @@ class PhosanisNightmareEncounter {
     if (special) {
       faceActorToward(boss, player);
       const hold = this.startSpecial(special, context) ?? holdAfter[special];
+      if (rootAfter[special]) this.root(boss, context.tick, rootAfter[special]);
       this.nextAttackAt = context.tick + hold;
       boss.combat.nextActionTick = this.nextAttackAt;
       this.specials.turnTaken(context);
@@ -406,11 +491,18 @@ class PhosanisNightmareEncounter {
     const style = reach && this.random() < (last ? meleeChance.last : meleeChance.early) ? "melee" : this.random() < 0.5 ? "magic" : "range";
     const stoppedBy = this.specials.protectionFor(style);
     // tsps (rsprox 1148, 1156): in her third phase the protection that would stop the attack goes off on her animation,
-    // any other stays on. While cursed, the shuffled one (not captured: tsps, theirs). OBS (runelogs): of the protections the
+    // any other stays on. While cursed, the shuffled one (tsps, theirs; OBS (Outside): all 4 of her cursed attacks that
+    // met a protection that would stop them, Protect from Melee off as her magic came, Protect from Magic as her ranged
+    // came; the 3 that met one that would not, it stayed on). OBS (Outside, five recordings): in her third phase the
+    // protection that would stop the attack, on the tick before her animation, was off on the tick of it 25 times of 25
+    // (9 of them cursed, each the shuffled one), and any other stayed on (34 of 34); in her first two phases it stayed on
+    // through her animation's tick 56 times of 57. OBS (runelogs): of the protections the
     // player had on that went off with none in their place, those 4 ticks before a hit on him (her magic or ranged
     // animation) or 2 before one 4 after the last (her melee): 23 of 95 in her third phase, 14 of 206 in the two before.
     if (last && player.activePrayer === protectionPrayers[stoppedBy]) context.setProtectionPrayer?.(null);
     boss.combat.attackStyle = style;
+    faceActorToward(boss, player);
+    this.root(boss, context.tick, rootAfter[style]);
     if (style === "melee") {
       const targetTile = [...player.position];
       const epoch = this.epoch;
@@ -426,7 +518,6 @@ class PhosanisNightmareEncounter {
       });
       return [];
     }
-    this.stillUntil = Math.max(this.stillUntil, context.tick + rootTicks);
     const attack = rollNpcAttack({
       attacker: boss, target: player, random: this.random,
       plan: {
@@ -460,6 +551,7 @@ class PhosanisNightmareEncounter {
     this.minions.wakeTotems(context.world);
     this.message(context, messages.shieldFails);
     this.sound(context, sounds.shieldFails);
+    this.specials.shieldFailed(context);
   }
   totemsCharged(context) {
     if (this.stage !== "totems") return;
@@ -504,9 +596,9 @@ class PhosanisNightmareEncounter {
   }
   nextPhase(context) {
     this.message(context, { text: "The Nightmare restores her shield.", color: "#ff3045" });
-    this.startPhase(context, this.phase + 1);
+    this.startPhase(context, this.phase + 1, firstAttackTicks.afterBlast);
   }
-  startPhase(context, phase) {
+  startPhase(context, phase, firstAttack = firstAttackTicks.woken) {
     this.epoch++;
     this.phase = phase;
     this.stage = "shield";
@@ -519,7 +611,7 @@ class PhosanisNightmareEncounter {
       boss.untargetable = false;
     }
     this.startSpecials();
-    this.nextAttackAt = context.tick + firstAttackTicks;
+    this.nextAttackAt = context.tick + firstAttack;
     if (boss) boss.combat.nextActionTick = this.nextAttackAt;
   }
   desperation(context) {
@@ -659,9 +751,22 @@ class PhosanisNightmareEncounter {
         melee: this.melee.filter((swing) => swing.at >= now).map((swing) => ({ ...swing, stoppedBy: this.specials.protectionFor("melee") })),
         ...this.specials.snapshot(now),
         ...this.minions.snapshot(now),
+        ...(this.specials.curse ? { playerOverheadPrayer: this.cursedOverhead() } : {}),
+        ...(this.specials.curse?.since !== undefined && now < this.specials.curse.since + curseTint.ticks
+          ? { screenTint: { color: curseTint.color, fadeInMs: curseTint.fadeInMs, since: this.specials.curse.since } }
+          : {}),
+        ...(this.specials.curse && (this.mechanics?.[curseMarkersKey] ?? false) ? { prayerMarkers: curseMarkers() } : {}),
       },
       visuals: {},
     };
+  }
+  // Cursed, the icon over the player is that of the style his protection stops now (OBS (Outside, five recordings,
+  // 282 cursed ticks, none otherwise): Protect from Magic shows the missiles icon, Protect from Melee the magic one,
+  // Protect from Missiles the melee one). Read by the scene in place of his prayer's own (rendering.js).
+  cursedOverhead() {
+    const prayer = this.world?.getPlayer()?.activePrayer ?? null;
+    const style = Object.keys(protectionPrayers).find((key) => protectionPrayers[key] === prayer);
+    return style ? protectionPrayers[curseStops[style]] : prayer;
   }
   getNpcDamageSourceLabel(npcId) {
     if (npcId?.startsWith("nightmare-husk")) return "Husk";
@@ -714,6 +819,14 @@ export const phosanisNightmareDefinition = {
     kind: phosanisNightmareKind,
     displayName: "Phosani's Nightmare",
     description: "Phosani's dream: her shield and the totems across three phases, her forms' specials in their order (claws, husks, flowers, curse, parasites, spores, surge), the sleepwalkers, her third phase's prayer disable and her last stand.",
+    // The texts of the page for search engines (client/seo/routes.js).
+    seo: {
+      title: "OSRS Phosani's Nightmare Simulator",
+      description: "Practice Phosani's Nightmare in your browser: the shield and totems of her three phases, her specials in their order, the sleepwalkers and her last stand.",
+      h1: "Phosani's Nightmare Simulator",
+      intro: "Phosani's Nightmare is the harder, solo form of the Nightmare in OSRS. This sim covers her shield and the totems across three phases, her specials in their order (claws, husks, flowers, curse, parasites, spores and surge), the sleepwalkers, the prayer disable of her third phase and her last stand.",
+      keywords: ["Phosani's Nightmare", "OSRS Phosani simulator", "Phosani's Nightmare simulator", "Phosani practice", "Nightmare simulator"],
+    },
     mapSquare: phosanisNightmareMapSquare,
     playerStart,
     loadsMapLocs: true,
@@ -732,8 +845,11 @@ export const phosanisNightmareDefinition = {
     }],
   },
   controls: {
-    defaultMechanicsConfig: {},
-    mechanicsToggles: [],
+    defaultMechanicsConfig: { [curseMarkersKey]: false },
+    mechanicsToggles: [{
+      key: curseMarkersKey, label: "Curse Prayer Markers", group: "aid", default: false,
+      info: "While she has cursed you, each protection prayer is outlined in the colour of the attack it now stops: green ranged, blue magic, red melee (as players set up RuneLite's Screen Markers).",
+    }],
     bossHpPresets: phasePresets,
     debugActions: [],
   },
