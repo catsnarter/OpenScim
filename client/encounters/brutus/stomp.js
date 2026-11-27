@@ -11,8 +11,9 @@ const side = (value, low, high) => (value <= low ? -1 : value >= high ? 1 : 0);
 // - at an end of an edge, or diagonal to his corner: an L round that corner, the corner tile and two along each edge;
 // - under him, the same by the row and column he's in (OBS: at his east column, the line east); in his middle tile
 //   the line south (inferred).
-// It hits on his own tiles too (WIKI: "adjacent tiles beneath Brutus"; OBS: two players under him hit, on no tile of
-// the graphic). `outside` is where the graphic is drawn; `all`, where it hits.
+// It also hits his own tiles beside those (WIKI: "adjacent tiles beneath Brutus"; OBS: two players under him hit, each
+// on such a tile, on no tile of the graphic): the edge row beside a line, the three of his corner beside an L.
+// `outside` is where the graphic is drawn; `all`, where it hits.
 export function stompTiles(corner, player) {
   const [bx, by] = corner;
   const far = bx + bossSize - 1;
@@ -33,8 +34,14 @@ export function stompTiles(corner, player) {
     const y = sy > 0 ? top + 1 : by - 1;
     for (let x = bx; x <= far; x++) outside.push([x, y]);
   }
+  const under = ([x, y]) => x >= bx && x <= far && y >= by && y <= top;
   const beneath = [];
-  for (let x = bx; x <= far; x++) for (let y = by; y <= top; y++) beneath.push([x, y]);
+  for (let x = bx; x <= far; x++) {
+    for (let y = by; y <= top; y++) {
+      const beside = outside.some(([ox, oy]) => Math.abs(ox - x) + Math.abs(oy - y) === 1);
+      if (beside && under([x, y])) beneath.push([x, y]);
+    }
+  }
   return { outside, all: [...outside, ...beneath] };
 }
 

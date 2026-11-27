@@ -31,18 +31,21 @@ const gaps = (list) => list.slice(1).map((value, n) => value - list[n]);
   // The encounter's own helpers, loaded once the harness has run a scenario and installed its module hooks.
   await ticksOf("stomps-only");
   const { stompTiles, chargeDirection } = await import("../client/encounters/brutus/encounter.js");
-  // The tiles of a stomp, as four recorded ones drew them (OBS, world tiles; WIKI: "3x1", "an L shape if diagonal",
-  // "adjacent tiles beneath Brutus"): beside the middle of his south edge, the three there; at the end of an edge, or
-  // under him at his corner, an L of five round that corner; under him at his east column, the line east. Each hits on
-  // his own nine tiles too.
+  // The tiles of a stomp, as four recorded ones drew them (OBS, world tiles; WIKI: "3x1", "an L shape if diagonal"):
+  // beside the middle of his south edge, the three there; at the end of an edge, or under him at his corner, an L of
+  // five round that corner; under him at his east column, the line east. Each hits his own tiles beside those too
+  // (WIKI: "adjacent tiles beneath Brutus"), where the two players under him were hit (OBS).
   const sorted = (tiles) => tiles.map(([x, y]) => x + "," + y).sort();
   assert.deepEqual(sorted(stompTiles([3259, 3290], [3260, 3289]).outside), sorted([[3259, 3289], [3260, 3289], [3261, 3289]]));
   assert.deepEqual(sorted(stompTiles([3256, 3285], [3258, 3288]).outside), sorted([[3257, 3288], [3258, 3288], [3259, 3288], [3259, 3287], [3259, 3286]]));
-  assert.deepEqual(sorted(stompTiles([3258, 3289], [3260, 3289]).outside), sorted([[3259, 3288], [3260, 3288], [3261, 3288], [3261, 3289], [3261, 3290]]));
-  assert.deepEqual(sorted(stompTiles([3258, 3291], [3260, 3292]).outside), sorted([[3261, 3291], [3261, 3292], [3261, 3293]]));
-  const all = stompTiles([3258, 3291], [3260, 3292]).all;
-  assert.equal(all.length, 12);
-  assert.ok(sorted(all).includes("3259,3292"), "his middle tile");
+  const lShape = stompTiles([3258, 3289], [3260, 3289]);
+  assert.deepEqual(sorted(lShape.outside), sorted([[3259, 3288], [3260, 3288], [3261, 3288], [3261, 3289], [3261, 3290]]));
+  assert.deepEqual(sorted(lShape.all.slice(5)), sorted([[3259, 3289], [3260, 3289], [3260, 3290]]), "his corner's three");
+  assert.ok(sorted(lShape.all).includes("3260,3289"), "OBS: a player there was hit");
+  const east = stompTiles([3258, 3291], [3260, 3292]);
+  assert.deepEqual(sorted(east.outside), sorted([[3261, 3291], [3261, 3292], [3261, 3293]]));
+  assert.deepEqual(sorted(east.all.slice(3)), sorted([[3260, 3291], [3260, 3292], [3260, 3293]]), "his east column");
+  assert.ok(!sorted(east.all).includes("3259,3292"), "not his middle tile");
   // The charge: toward the player on his furthest axis.
   assert.equal(chargeDirection([10, 10], [5, 11]), "W");
   assert.equal(chargeDirection([10, 10], [11, 20]), "N");
