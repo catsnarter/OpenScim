@@ -163,6 +163,16 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
 }
 
 {
+  // The setup's switches: with the blast and the smite off she sweeps after every three standard attacks, and nothing else.
+  const ticks = await ticksOf("sweep-only");
+  assert.deepEqual(clipTicks(ticks, "blast").concat(clipTicks(ticks, "smite")), []);
+  const draws = ticksWith(ticks, (tick) => tick.clips.some((clip) => /_draw$/.test(clip)));
+  assert.equal(draws[0], 23, "her first special, after three standard attacks");
+  assert.ok(draws.length >= 2, "and the next sweep after three more");
+  assert.equal(ticks[draws[0] + 1].state.nextSpecial, "sweep");
+}
+
+{
   // Untouchable while she wakes; the snapshot says so.
   const ticks = await ticksOf("start");
   assert.equal(ticks[1].state.phase, "waking");

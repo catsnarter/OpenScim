@@ -41,6 +41,15 @@ const firstAttackAfterTicks = 4; // OBS: the wake t2, her first swing t6
 const attackSpeed = 6; // TABLE, WIKI, OBS: swings 6 ticks apart
 const standardsBetweenSpecials = 3; // WIKI, OBS: three standard attacks after a special, then the next
 const specialOrder = ["blast", "sweep", "smite"]; // OBS: blast t24, sweep t66, smite t114, and again (one kill)
+// The setup menu's switches, one a special, all on: one switched off is skipped and the next one on comes instead; with
+// none on she only swings, enraged too. For practising one special at a time.
+const specialKeys = { blast: "madAngelBlast", sweep: "madAngelSweep", smite: "madAngelSmite" };
+const defaultMechanics = Object.fromEntries(Object.values(specialKeys).map((key) => [key, true]));
+const specialToggles = [
+  { key: specialKeys.blast, label: "Blast", info: "The ball of light: stand on its tile to bounce it back to her." },
+  { key: specialKeys.sweep, label: "Sweep", info: "Her sword's cleaves: step to the side opposite the sword, or behind her." },
+  { key: specialKeys.smite, label: "Smite", info: "Her lightning: Protect from Magic on the tick it strikes." },
+].map((toggle) => ({ ...toggle, section: "Specials", setup: true }));
 const meleeMaxHit = 31; // WIKI: "will reduce the max hit of its standard attacks from 31 to 5"
 const meleePrayedShare = 5 / 31; // WIKI; OBS: prayed hits of 0 to 5
 const meleeImpactTicks = 2; // OBS: each hitsplat 2 ticks after her swing
@@ -163,7 +172,7 @@ class MadAngelEncounter {
     return { encounterSeed: this.seed };
   }
   getDefaultMechanicsConfig() {
-    return {};
+    return { ...defaultMechanics };
   }
   getDefaultPlayerStart() {
     return [...playerStart];
@@ -203,7 +212,8 @@ class MadAngelEncounter {
   }
 
   // --- every tick ----------------------------------------------------------------
-  resolveHazards(context) {
+  resolveHazards(context, mechanics) {
+    if (mechanics) this.mechanics = mechanics;
     this.now = context.tick;
     this.context = context;
     for (let due = this.takeDueTask(); due; due = this.takeDueTask()) due.task(context);
@@ -254,8 +264,9 @@ class MadAngelEncounter {
     // The blast lets her standard attacks go on; the others hold them till they end.
     if (this.special && this.special.name !== "blast") return none;
     if (!this.special && !this.enraged && boss.vitals.hp <= enrageHitpoints) return this.enrage(boss, context);
-    if (!this.special && (this.enraged || this.standards >= standardsBetweenSpecials)) {
-      this.startSpecial(boss, player, context);
+    const next = this.special ? null : this.nextEnabledSpecial();
+    if (next && (this.enraged || this.standards >= standardsBetweenSpecials)) {
+      this.startSpecial(next, boss, player, context);
       return none;
     }
     this.nextAt = context.tick + attackSpeed;
@@ -283,9 +294,16 @@ class MadAngelEncounter {
   }
 
   // --- her specials -------------------------------------------------------------------
-  startSpecial(boss, player, context) {
-    const name = specialOrder[this.nextSpecial];
-    this.nextSpecial = (this.nextSpecial + 1) % specialOrder.length;
+  // Her next special in turn that the setup has on, or none.
+  nextEnabledSpecial() {
+    for (let n = 0; n < specialOrder.length; n++) {
+      const name = specialOrder[(this.nextSpecial + n) % specialOrder.length];
+      if (this.mechanics?.[specialKeys[name]] !== false) return name;
+    }
+    return null;
+  }
+  startSpecial(name, boss, player, context) {
+    this.nextSpecial = (specialOrder.indexOf(name) + 1) % specialOrder.length;
     this.standards = 0;
     if (name === "blast") this.startBlast(boss, player, context);
     else if (name === "sweep") this.startSweep(boss, player, context);
@@ -514,7 +532,7 @@ class MadAngelEncounter {
         phase: this.phase,
         enraged: this.enraged,
         standardsSinceSpecial: this.standards,
-        nextSpecial: specialOrder[this.nextSpecial],
+        nextSpecial: this.nextEnabledSpecial(),
         nextAttackAt: this.nextAt,
         maxHitEarned: this.maxHitEarned,
         sideDodged: this.sideDodged,
@@ -557,7 +575,7 @@ export const madAngelDefinition = {
     isWorkInProgress: true,
     loadouts: madAngelLoadouts,
   },
-  controls: { defaultMechanicsConfig: {}, mechanicsToggles: [], debugActions: [] },
+  controls: { defaultMechanicsConfig: { ...defaultMechanics }, mechanicsToggles: specialToggles, debugActions: [] },
 };
 export { madAngelDefinition as definition };
 export const order = 86;

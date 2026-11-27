@@ -110,6 +110,19 @@ export const scenarios = [
       if (api.player().attackTarget !== BOSS) attack(api, BOSS);
     },
   },
+  {
+    // The setup's switches: the sweep alone, for practising it. Protect from Melee, standing still: caught by each cleave.
+    name: "mad-angel/sweep-only",
+    kind: KIND,
+    seed: 4,
+    ticks: 130,
+    mechanics: { infiniteHealth: true, infinitePrayer: true, madAngelBlast: false, madAngelSmite: false },
+    ...graniteHammer,
+    script(tick, api) {
+      if (tick === 1) protect(api, "ProtectMelee");
+      if (api.player().attackTarget !== BOSS) attack(api, BOSS);
+    },
+  },
   // The snapshot of a fresh fight: she wakes.
   {
     name: "mad-angel/start",
