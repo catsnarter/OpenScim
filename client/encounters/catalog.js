@@ -42,6 +42,7 @@ export const encounterCatalog = {
   yama_p3: { category: "boss", aliases: ["yama", "contracts", "oathplate", "chasm of fire"] },
   doom_of_mokhaiotl: { category: "boss", aliases: ["doom", "delve", "mokhaiotl", "delves"] },
   maggot_king: { category: "boss", aliases: ["maggot"] },
+  mad_angel: { category: "boss", aliases: ["angel", "golem", "ardeaglais", "wyrmscraig", "fallen from grace"] },
   corrupted_hunllef: { category: "minigame", aliases: ["gauntlet", "cg", "hunllef", "corrupted gauntlet", "prifddinas"] },
   sandbox: { category: "other", aliases: ["editor", "custom", "scenario", "build"] },
 };
