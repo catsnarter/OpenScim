@@ -10,24 +10,50 @@ const state = (api) => api.engine.getEncounterSnapshot().state;
 const sameTile = (a, b) => a[0] === b[0] && a[1] === b[1];
 const prayers = { magic: "ProtectMagic", melee: "ProtectMelee", ranged: "ProtectRange" };
 
-// Out of a special's way as soon as it is round the player: two tiles diagonally from a charge's four lanes, two
-// tiles straight from a slam's four corners; of the four such tiles, the one nearest the middle of the open field
-// (58, 14): a fence runs along its west side, and the push the game gives a player too near one isn't in the
-// encounter. Returns true while a special is on.
+// Out of a special's way. A slam: two tiles straight from the tile it is round, of the four such tiles the one nearest
+// the middle of the open field (58, 14), as a fence runs along its west side (the push the game gives a player too
+// near one isn't in the encounter). A charge: its four lanes are offset round the player, so before each bull lands
+// the player steps (at most two tiles, a tick's run) to a tile clear of that bull's lane and, if he can, the next
+// one's: the two "dodge tiles", toward the middle of the field. Returns true while a special is on.
 const middle = [58, 14];
-function dodge(api) {
+const dashes = { W: [1, 0], E: [-1, 0], S: [0, 1], N: [0, -1] };
+function inLane(bull, [x, y]) {
+  const [dx, dy] = dashes[bull.from];
+  for (let step = 0; step <= 7; step++) {
+    const cx = bull.corner[0] + dx * step;
+    const cy = bull.corner[1] + dy * step;
+    if (x >= cx && x < cx + 3 && y >= cy && y < cy + 3) return true;
+  }
+  return false;
+}
+function go(api, tile) {
+  if (sameTile(tile, api.player().position)) return;
+  if (api.player().attackTarget !== null) attack(api, null);
+  api.moveTo(...tile);
+}
+function dodge(api, tick) {
   const special = state(api).special;
   if (!special) return false;
   if (!special.at) return true; // faded, not yet back
   const [x, y] = special.at;
-  const offsets = special.name === "charge" ? [[2, 2], [2, -2], [-2, 2], [-2, -2]] : [[2, 0], [-2, 0], [0, 2], [0, -2]];
-  const distance = ([dx, dy]) => Math.abs(x + dx - middle[0]) + Math.abs(y + dy - middle[1]);
-  const [dx, dy] = offsets.reduce((best, offset) => (distance(offset) < distance(best) ? offset : best));
-  const tile = [x + dx, y + dy];
-  if (!sameTile(tile, api.player().position)) {
-    if (api.player().attackTarget !== null) attack(api, null);
-    api.moveTo(...tile);
+  if (special.name === "slam") {
+    const offsets = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+    const distance = ([dx, dy]) => Math.abs(x + dx - middle[0]) + Math.abs(y + dy - middle[1]);
+    const [dx, dy] = offsets.reduce((best, offset) => (distance(offset) < distance(best) ? offset : best));
+    go(api, [x + dx, y + dy]);
+    return true;
   }
+  // The bull that lands as the next tick starts, and the one after it.
+  const n = tick + 1 - special.firstBullAt;
+  const next = special.bulls.slice(Math.max(0, n), Math.max(0, n) + 2);
+  if (!next.length) return true;
+  const here = api.player().position;
+  const tiles = [];
+  for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) tiles.push([here[0] + dx, here[1] + dy]);
+  // Clear of the next bull above all, then of the one after, then toward the middle of the field (away from its fences).
+  const score = (tile) =>
+    (inLane(next[0], tile) ? 100 : 0) + (next[1] && inLane(next[1], tile) ? 10 : 0) + 0.5 * (Math.abs(tile[0] - middle[0]) + Math.abs(tile[1] - middle[1]));
+  go(api, tiles.reduce((best, tile) => (score(tile) < score(best) ? tile : best)));
   return true;
 }
 // In phase 2, the prayer for the orb that lands this tick (a prayer turned on in a tick counts against its hits);
@@ -70,7 +96,7 @@ export const scenarios = [
     ...bare,
     script(tick, api) {
       run(api, tick);
-      dodge(api);
+      dodge(api, tick);
     },
   },
   {
@@ -98,7 +124,7 @@ export const scenarios = [
     script(tick, api) {
       run(api, tick);
       pray(api, tick);
-      if (dodge(api)) return;
+      if (dodge(api, tick)) return;
       if (api.player().attackTarget !== BOSS) attack(api, BOSS);
     },
   },

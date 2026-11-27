@@ -18,18 +18,19 @@ export const demonicSeqIds = {
   fadeOut: 13795, // COW_BOSS_CHARGE_START_FADE_OUT: as he fades at a special's start
   chargeFadeIn: 13793, // COW_BOSS_CHARGING_FADE_IN_FADE_OUT: as he reappears for a charge
   ghostChargeFadeIn: 13794, // COW_BOSS_GHOST_CHARGING_FADE_IN_FADE_OUT
-  ghostCharge: 13779, // COW_BOSS_GHOST_CHARGE
   stompFadeIn: 13799, // COW_BOSS_STOMP_FADE_IN: as he reappears for a slam
   ghostStompFadeIn: 13800, // COW_BOSS_GHOST_STOMP_FADE_IN
-  slam: 13791, // COW_BOSS_SPIRIT_STOMP
-  ghostSlam: 13792, // COW_BOSS_GHOST_SPIRIT_STOMP
   ghostFadeOut: 13796, // COW_BOSS_GHOST_CHARGE_START_FADE_OUT: as a ghost goes
+  chargeEndFadeIn: 13797, // COW_BOSS_CHARGE_END_FADE_IN: as he comes back after his charge
 };
 
-// Phase 2's orbs, one of each style: spawned over the player, and the splash on him as each lands.
+// Phase 2's orbs, one of each style (CACHE: their sequences named MILK_ORB_*): spawned over the player (a tick long),
+// held there (a loop a tick long), dropping onto him (a tick and a bit), and the splash on him as each lands.
 export const orbSpotAnims = {
-  spawn: { ranged: 3600, melee: 3601, magic: 3602 }, // VFX_COWBOSS_HM_SPAWN_*_01
-  impact: { ranged: 3594, melee: 3595, magic: 3596 }, // VFX_COWBOSS_HM_IMPACT_*_01
+  spawn: { ranged: 3600, melee: 3601, magic: 3602 }, // VFX_COWBOSS_HM_SPAWN_*_01, MILK_ORB_SPAWN (30 cycles)
+  held: { ranged: 3591, melee: 3592, magic: 3593 }, // VFX_COWBOSS_HM_*_01, MILK_ORB_STATIC (30 cycles, looping)
+  drop: { ranged: 3597, melee: 3598, magic: 3599 }, // VFX_COWBOSS_HM_LAUNCH_*_01, MILK_ORB_DROP (35 cycles)
+  impact: { ranged: 3594, melee: 3595, magic: 3596 }, // VFX_COWBOSS_HM_IMPACT_*_01, MILK_IMPACT (30 cycles)
 };
 
 export const seqIds = {

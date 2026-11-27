@@ -18,13 +18,15 @@ async function ticksOf(name) {
         phase: state.phase,
         special: state.special,
         ghosts: [...engine.worldState.actors.values()].filter((actor) => actor.npcTypeId === 15629).length,
-        // Each bull's facing and the way to the player from its middle, in the game's 2048ths (0 south, 512 west).
+        // Each bull's facing, and the way from its middle to the tile its special is round, in the game's 2048ths (0 south,
+        // 512 west).
         facings: [...engine.worldState.actors.values()]
           .filter((actor) => actor.id === "brutus" || actor.npcTypeId === 15629)
           .map((actor) => {
-            const player = engine.player();
-            const dx = player.position[0] + 0.5 - actor.position[0] - actor.size / 2;
-            const dy = player.position[1] + 0.5 - actor.position[1] - actor.size / 2;
+            // Toward the tile the special is round (the player's as it was placed).
+            const at = engine.getEncounterSnapshot().state.special?.at ?? engine.player().position;
+            const dx = at[0] + 0.5 - actor.position[0] - actor.size / 2;
+            const dy = at[1] + 0.5 - actor.position[1] - actor.size / 2;
             return { id: actor.id, facing: actor.lockedFacing ?? null, toPlayer: (Math.round(Math.atan2(-dx, -dy) * (2048 / (Math.PI * 2))) + 2048) % 2048 };
           }),
         texts: events.filter((event) => event.type === "overhead_text").map((event) => event.overheadText),
@@ -51,13 +53,22 @@ const specials = (ticks) =>
   // The encounter's own helpers, loaded once the harness has run a scenario and installed its module hooks.
   await ticksOf("slams-only");
   const { chargeStart, chargeLane, slamCorner, specialStarts } = await import("../client/encounters/brutus/demonic.js");
-  // A charge from the west: his 3 x 3 on the player's row, two tiles off him; its lane is the player's row and the
-  // rows beside it, across him.
+  // A charge from the west: two tiles off the player, the player in his north row (the row on his left as he faces
+  // east; OBS); from the east, in his south row. Its lane is those three rows, across the player's tile.
   const west = chargeStart("W", [20, 20]);
-  assert.deepEqual(west, { corner: [15, 19], direction: "E" });
+  assert.deepEqual(west, { corner: [15, 18], direction: "E" });
+  assert.deepEqual(chargeStart("E", [20, 20]), { corner: [23, 20], direction: "W" });
   const lane = chargeLane(west.corner, west.direction).lane;
-  for (const tile of ["20,20", "20,19", "20,21", "15,20", "24,20"]) assert.ok(lane.has(tile), tile);
-  for (const tile of ["20,22", "22,22", "18,18"]) assert.ok(!lane.has(tile), tile);
+  for (const tile of ["20,20", "20,19", "20,18", "15,20", "24,20"]) assert.ok(lane.has(tile), tile);
+  for (const tile of ["20,21", "22,22", "18,17"]) assert.ok(!lane.has(tile), tile);
+  // The four lanes round the player don't all cross the tiles diagonal to him: one clear of the first two bulls (from
+  // the west, then the north), another of the last two (the east, then the south), two tiles apart.
+  const lanes = ["W", "N", "E", "S"].map((side) => {
+    const start = chargeStart(side, [20, 20]);
+    return chargeLane(start.corner, start.direction).lane;
+  });
+  assert.ok(!lanes[0].has("21,21") && !lanes[1].has("21,21"), "21,21 clear of the first two");
+  assert.ok(!lanes[2].has("19,19") && !lanes[3].has("19,19"), "19,19 clear of the last two");
   // A slam from the south-west: his north-east tile diagonal to the player's.
   assert.deepEqual(slamCorner("SW", [20, 20]), [17, 17]);
   assert.deepEqual(slamCorner("NE", [20, 20]), [21, 21]);
@@ -86,12 +97,17 @@ const specials = (ticks) =>
     const bulls = when(ticks, (tick) => tick.bulls.length).filter((tick) => tick >= special.firstBullAt && tick < special.firstBullAt + 4);
     assert.deepEqual(bulls, [0, 1, 2, 3].map((n) => special.firstBullAt + n));
     for (const tick of bulls) for (const damage of ticks[tick].bulls) assert.ok(damage >= 45 && damage <= 56, `bull ${damage}`);
-    // Three ghosts with him, gone once their bulls are done.
-    assert.equal(ticks[special.fadedAt + 1].ghosts, 3);
-    // As they appear, he and each ghost face the player, and keep that facing (OBS: every ghost turned to him).
-    const facings = ticks[special.fadedAt + 1].facings;
-    assert.equal(facings.length, 4);
-    for (const bull of facings) assert.equal(bull.facing, bull.toPlayer, `${bull.id} at the fade ${special.fadedAt}`);
+    // Three ghosts with him, each appearing as its animation needs to reach its hit (a slam 2 ticks before, a charge 1;
+    // CACHE), so one a tick: all there 2 ticks after the first bull, gone once their bulls are done.
+    const lead = special.name === "slam" ? 2 : 1;
+    for (let n = 0; n < 3; n++) assert.equal(ticks[special.firstBullAt - lead + n].ghosts, n, `ghosts ${lead} ticks before bull ${n}`);
+    assert.equal(ticks[special.firstBullAt + 2].ghosts, 3);
+    // He and each ghost face the player as they appear (OBS: every ghost turned to him).
+    for (let n = 0; n < 4; n++) {
+      const appeared = ticks[special.firstBullAt - lead + n].facings.filter((bull) => (n === 0 ? bull.id === "brutus" : bull.id !== "brutus"));
+      const bull = n === 0 ? appeared[0] : appeared.at(-1);
+      assert.equal(bull.facing, bull.toPlayer, `bull ${n} after the fade at ${special.fadedAt}`);
+    }
     assert.equal(ticks[special.firstBullAt + 6]?.ghosts ?? 0, 0);
   }
 }

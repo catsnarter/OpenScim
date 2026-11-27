@@ -10,8 +10,9 @@
 //   the two beside it and his own; three ghosts the same at the other corners.
 // The two alternate, from sides and corners that go round the player: E, SW,
 // W, NE (or S, NW, N, SE), from a random one of the four. Each bull hits for 45
-// to 56, through prayer. A step two tiles diagonal from where the player
-// stood dodges a charge's four; two tiles straight, a slam's.
+// to 56, through prayer. A charge's lanes are offset round the player, each
+// bull's left row on him: a tile clear of the first two, then one clear of the
+// last two, dodge it; two tiles straight dodge a slam.
 // - from 500 hitpoints his first bull is 3 ticks after he fades, not 5;
 // - from 250 the ghosts go counterclockwise;
 // - at 0 he says "moo moo!" and heals 487: phase 2, the same with four orbs
@@ -86,14 +87,17 @@ const footprint = (corner) => {
   return tiles;
 };
 
-// Where a bull stands for a charge from `side` of the player at `p`, and the way it dashes: across his row or column,
-// `charge.gap` tiles off him (inferred: OBS him a few tiles off, then past the player).
+// Where a bull stands for a charge from `side` of the player at `p`, and the way it dashes: `charge.gap` tiles off him,
+// with the player in the row (or column) on the bull's left as it faces him (OBS: from the west, the player in his north
+// row; from the east, in his south row; north and south inferred, the same turned). So the four lanes don't cross on
+// the player's tile: a tile clear of the first two bulls, then one clear of the last two, two tiles diagonally apart
+// (WIKI: "once on the second dodge tile").
 export function chargeStart(side, [px, py]) {
   const far = charge.gap + 1;
-  if (side === "W") return { corner: [px - far - bossSize + 1, py - 1], direction: "E" };
-  if (side === "E") return { corner: [px + far, py - 1], direction: "W" };
-  if (side === "S") return { corner: [px - 1, py - far - bossSize + 1], direction: "N" };
-  return { corner: [px - 1, py + far], direction: "S" };
+  if (side === "W") return { corner: [px - far - bossSize + 1, py - 2], direction: "E" };
+  if (side === "E") return { corner: [px + far, py], direction: "W" };
+  if (side === "S") return { corner: [px, py - far - bossSize + 1], direction: "N" };
+  return { corner: [px - 2, py + far], direction: "S" };
 }
 
 // A charge's lane: every tile his 3x3 covers from where he stands to where he stops.
@@ -338,11 +342,19 @@ class DemonicBrutusEncounter {
     this.nextAt = lastBull + nextButtAfterLastBull;
     boss.untargetable = true;
     this.animate(context, bossActorId, "fadeOut");
-    this.scheduled(1, (ctx) => this.appear(ctx, start, clockwise));
+    this.scheduled(1, (ctx) => this.place(ctx, start, clockwise));
+    // Each bull appears as its animation needs to land on its tick: a slam's fade-in stomp lands 2 ticks after it starts
+    // (CACHE: its impact sound at frame 11 or 12, of 5 cycles each), a charge's fade-in run 1 tick after. So they appear
+    // one by one, a tick apart (OBS: the ghosts appearing in turn round the player).
+    const appearsBefore = start.kind === "slam" ? 2 : 1;
     for (let n = 0; n < 4; n++) {
-      this.scheduled(lead + n, (ctx) => this.bullSetsOff(ctx, n));
+      this.scheduled(lead + n - appearsBefore, (ctx) => this.appear(ctx, n));
+      if (start.kind === "charge") this.scheduled(lead + n, () => this.dash(n));
       this.scheduled(lead + n, (ctx) => this.bullLands(ctx, n));
     }
+    if (start.kind === "charge") this.scheduled(lead + 2, (ctx) => this.animate(ctx, bossActorId, "chargeEndFadeIn"));
+    // Phase 2's orbs over the player's head from a tick after he fades, each till the tick before it lands.
+    for (let t = 2; t <= lead + 2; t++) this.scheduled(t, (ctx) => this.holdOrbs(ctx, fadedAt + t));
     this.scheduled(lead + 3 + 1, (ctx) => {
       const now = this.boss(ctx.world);
       if (!now) return;
@@ -351,15 +363,17 @@ class DemonicBrutusEncounter {
     });
     return true;
   }
-  // A tick after he fades: he and three ghosts round the player where he stands now; in phase 2, the orbs over him.
-  appear(context, start, clockwise) {
+  orbHeight(n) {
+    return 220 + n * 60; // inferred: stacked over the player's head, the first to land at the bottom
+  }
+  // A tick after he fades: where he and his three ghosts will stand, round the player where he stands now; in phase 2,
+  // the orbs over him.
+  place(context, start, clockwise) {
     const player = context.world.getPlayer();
     const at = [...player.position];
     const special = this.special;
     special.at = at;
-    const froms = specialStarts(start.kind, start.from, clockwise);
-    const boss = this.boss(context.world);
-    special.bulls = froms.map((from, n) => {
+    special.bulls = specialStarts(start.kind, start.from, clockwise).map((from, n) => {
       const id = n === 0 ? bossActorId : `brutus_ghost_${++this.ghosts}`;
       if (start.kind === "charge") {
         const { corner, direction } = chargeStart(from, at);
@@ -368,45 +382,62 @@ class DemonicBrutusEncounter {
       const corner = slamCorner(from, at);
       return { id, from, corner, tiles: demonicSlamTiles(corner, at) };
     });
-    // Each bull faces the player as it appears, and keeps that facing through its charge or slam (OBS: every ghost
-    // turned to the player; a charge runs straight at him). Brutus's is let go when the special ends.
-    const facePlayer = (actor) => {
-      faceActorToward(actor, player);
-      actor.lockedFacing = actor.facing;
-      return actor;
-    };
-    for (const bull of special.bulls) {
-      if (bull.id === bossActorId) {
-        boss.position = [...bull.corner];
-        boss.previousPosition = [...bull.corner];
-        facePlayer(boss);
-        this.animate(context, bossActorId, start.kind === "charge" ? "chargeFadeIn" : "stompFadeIn");
-        continue;
-      }
-      context.spawnNpc(facePlayer(ghostDefinition.createActor({
-        id: bull.id, kind: "npc", role: "npc", npcTypeId: npcTypeIds.demonicGhost, archetypeId: "brutus-ghost", size: bossSize, alive: true,
-        position: [...bull.corner], previousPosition: [...bull.corner], facing: boss.facing, history: new Map(),
-        untargetable: true, blocksNpcMovement: false, passThruNpcs: true,
-        vitals: { hp: 1, maxHp: 1 },
-        combat: { attackSpeed: 1, attackRange: 0, attackStyle: "typeless", nextActionTick: Infinity, targetId: null, lastAttackTick: null,
-          animations: { idle: null, walk: null, run: null, attack: null, death: null } },
-      }, {})));
-      this.animate(context, bull.id, start.kind === "charge" ? "ghostChargeFadeIn" : "ghostStompFadeIn");
-    }
     if (this.phase === 2) {
       // OBS: four orbs over the player; they land bottom first: magic, melee, ranged, then one at random.
       special.orbs = [...orbStyles, orbStyles[Math.floor(this.random() * orbStyles.length)]];
-      this.animate(context, null, null, special.orbs.map((style, n) => onActor(orbSpotAnims.spawn[style], player, 220 + n * 60)));
+      this.animate(context, null, null, special.orbs.map((style, n) => onActor(orbSpotAnims.spawn[style], player, this.orbHeight(n))));
     }
   }
-  // The bull's move: a charge's dash starts on its tick (its lane hits as it sets off, as Brutus's charge does).
-  bullSetsOff(context, n) {
-    const bull = this.special?.bulls[n];
+  // A bull appears where place() put it, facing the tile it is round, with the animation that brings it to its hit:
+  // he moves there; a ghost is spawned. Each keeps that facing through its charge or slam (OBS: every ghost turned to
+  // the player; a charge runs straight at him); his is let go when the special ends.
+  appear(context, n) {
+    const special = this.special;
+    const bull = special?.bulls[n];
     if (!bull) return;
-    const charging = this.special.name === "charge";
-    const clip = charging ? (bull.id === bossActorId ? "charge" : "ghostCharge") : bull.id === bossActorId ? "slam" : "ghostSlam";
-    this.animate(context, bull.id, clip);
-    if (charging) this.dashes.set(bull.id, { path: bull.path, travelled: 0 });
+    const charging = special.name === "charge";
+    const facePlayer = (actor) => {
+      faceActorToward(actor, { position: special.at, size: 1 });
+      actor.lockedFacing = actor.facing;
+      return actor;
+    };
+    if (bull.id === bossActorId) {
+      const boss = this.boss(context.world);
+      boss.position = [...bull.corner];
+      boss.previousPosition = [...bull.corner];
+      facePlayer(boss);
+      this.animate(context, bossActorId, charging ? "chargeFadeIn" : "stompFadeIn");
+      return;
+    }
+    context.spawnNpc(facePlayer(ghostDefinition.createActor({
+      id: bull.id, kind: "npc", role: "npc", npcTypeId: npcTypeIds.demonicGhost, archetypeId: "brutus-ghost", size: bossSize, alive: true,
+      position: [...bull.corner], previousPosition: [...bull.corner], facing: 0, history: new Map(),
+      untargetable: true, blocksNpcMovement: false, passThruNpcs: true,
+      vitals: { hp: 1, maxHp: 1 },
+      combat: { attackSpeed: 1, attackRange: 0, attackStyle: "typeless", nextActionTick: Infinity, targetId: null, lastAttackTick: null,
+        animations: { idle: null, walk: null, run: null, attack: null, death: null } },
+    }, {})));
+    this.animate(context, bull.id, charging ? "ghostChargeFadeIn" : "ghostStompFadeIn");
+  }
+  // A charge's dash, on its bull's tick (its lane hits as it sets off, as Brutus's charge does). Its run is in the
+  // fade-in animation it appeared with.
+  dash(n) {
+    const bull = this.special?.bulls[n];
+    if (bull) this.dashes.set(bull.id, { path: bull.path, travelled: 0 });
+  }
+  // The orbs still to land, on tick `tick`: each held over the player's head (a static orb that loops a tick, drawn
+  // again each tick) till the tick before it lands, then dropping onto him (CACHE: MILK_ORB_STATIC, MILK_ORB_DROP).
+  holdOrbs(context, tick) {
+    const special = this.special;
+    if (!special?.orbs.length) return;
+    const player = context.world.getPlayer();
+    const graphics = [];
+    special.orbs.forEach((style, n) => {
+      const lands = special.firstBullAt + n;
+      if (tick < lands - 1) graphics.push(onActor(orbSpotAnims.held[style], player, this.orbHeight(n)));
+      else if (tick === lands - 1) graphics.push(onActor(orbSpotAnims.drop[style], player, this.orbHeight(n)));
+    });
+    if (graphics.length) this.animate(context, null, null, graphics);
   }
   // As the bull's tick starts, before the player moves (as Brutus's stomp and charge, OBS): what it finds him on, and
   // (phase 2) its orb.

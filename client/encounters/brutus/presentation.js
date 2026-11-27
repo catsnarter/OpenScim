@@ -33,7 +33,7 @@ const demonicRenderConfig = {
   terrainMapSquare: brutusMapSquare,
   mapSquareOffsets: brutusMapSquareOffsets,
   primaryNpc: { actorId: bossActorId, npcTypeId: npcTypeIds.demonic, basePosition: bossStart, size: bossSize, deathSeqId: seqIds.death },
-  spotAnimIds: [...new Set([...Object.values(spotAnims), ...Object.values(orbSpotAnims.spawn), ...Object.values(orbSpotAnims.impact)])],
+  spotAnimIds: [...new Set([...Object.values(spotAnims), ...Object.values(orbSpotAnims).flatMap((byStyle) => Object.values(byStyle))])],
   preloadNpcTypes: [
     {
       npcTypeId: npcTypeIds.demonic,
@@ -44,8 +44,7 @@ const demonicRenderConfig = {
         fadeOut: demonicSeqIds.fadeOut,
         chargeFadeIn: demonicSeqIds.chargeFadeIn,
         stompFadeIn: demonicSeqIds.stompFadeIn,
-        charge: seqIds.charge,
-        slam: demonicSeqIds.slam,
+        chargeEndFadeIn: demonicSeqIds.chargeEndFadeIn,
       },
       deathSeqId: seqIds.death,
       bossDeathAnimationEnabled: true,
@@ -56,8 +55,6 @@ const demonicRenderConfig = {
       attackClips: {
         ghostChargeFadeIn: demonicSeqIds.ghostChargeFadeIn,
         ghostStompFadeIn: demonicSeqIds.ghostStompFadeIn,
-        ghostCharge: demonicSeqIds.ghostCharge,
-        ghostSlam: demonicSeqIds.ghostSlam,
         ghostFadeOut: demonicSeqIds.ghostFadeOut,
       },
     },
