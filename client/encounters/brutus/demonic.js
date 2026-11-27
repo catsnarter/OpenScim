@@ -15,14 +15,15 @@
 // last two, dodge it; two tiles straight dodge a slam.
 // - from 500 hitpoints his first bull is 3 ticks after he fades, not 5;
 // - from 250 the ghosts go counterclockwise;
+// - a player too close to an obstacle as a special starts is pushed into
+//   open space, and walks (no running) till it ends;
 // - at 0 he says "moo moo!" and heals 487: phase 2, the same with four orbs
 //   over the player's head, which land with the bulls, each a projectile of
 //   the style its colour shows (magic, melee, ranged, then one at random) for
 //   18 to 20, which that protection prayer stops.
 //
-// Not here: the player pushed into open space when a special starts by an
-// obstacle (WIKI); the orbs' projectiles in flight (only their splash); the
-// bulls' paths around the field's fences (they pass through).
+// Not here: the orbs' projectiles in flight (only their splash, and them held
+// and dropping over the player's head).
 //
 // Sources: WIKI Demonic Brutus and Demonic Brutus/Strategies; TABLE his stats
 // (client/data/monsters.js, 15628); CACHE his ids (ids.js); OBS one kill read
@@ -38,7 +39,7 @@ import { buildActorVisualTarget, faceActorToward } from "../shared/npcHelpers.js
 import { isArenaFootprintWalkable } from "../shared/npcMovement.js";
 import { brutusPursuitMoves, besideHim } from "./movement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
-import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart } from "./ids.js";
+import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart, sameTile } from "./ids.js";
 import { demonicSlamTiles } from "./stomp.js";
 
 export const demonicBrutusKind = "brutus_demonic";
@@ -59,6 +60,11 @@ const phaseTwoFirstButt = 5; // OBS: "moo moo!" t169, his next butt t174
 const deathTicks = 4; // as Brutus's (inferred)
 const charge = { tiles: 7, tilesPerTick: 4, gap: 2 }; // as Brutus's charge (inferred); gap: tiles between him and the player
 const ghostStayTicks = 2; // inferred: a ghost goes once its bull is done
+// WIKI: "if the player stands too close to an obstacle when a special starts, they are pushed into open space and cannot
+// run for the special's duration". inferred: too close is an obstacle within 3 tiles (the 7 x 7 his slam's corners
+// stand in); open space is the nearest tile, by a walk of at most `pushSearch` tiles, with none.
+const clearance = 3;
+const pushSearch = 12;
 
 // The specials' starts, in turn (OBS: E, SW, W, NE, E, SW, W, NE, E, SW, W: a charge from a side, a slam from a
 // corner). WIKI: "If West, specials start W or E ... If South, they swap N and S": the other axis, inferred.
@@ -125,6 +131,36 @@ export function slamCorner(cornerName, [px, py]) {
   return [west ? px - bossSize : px + 1, south ? py - bossSize : py + 1];
 }
 
+// Whether a tile has no obstacle within `clearance` tiles of it.
+function isOpen([x, y]) {
+  for (let dx = -clearance; dx <= clearance; dx++) {
+    for (let dy = -clearance; dy <= clearance; dy++) if (!isArenaFootprintWalkable([x + dx, y + dy], 1)) return false;
+  }
+  return true;
+}
+
+// Where a player at `p` is pushed as a special starts: `p` itself if open, else the nearest open tile by a walk over
+// walkable tiles (as far as `pushSearch`), else nowhere (null: he stays).
+export function openSpaceFor(p) {
+  if (isOpen(p)) return [...p];
+  const seen = new Set([key(p)]);
+  let frontier = [p];
+  for (let distance = 1; distance <= pushSearch && frontier.length; distance++) {
+    const next = [];
+    for (const [x, y] of frontier) {
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const tile = [x + dx, y + dy];
+        if (seen.has(key(tile)) || !isArenaFootprintWalkable(tile, 1)) continue;
+        seen.add(key(tile));
+        if (isOpen(tile)) return tile;
+        next.push(tile);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
 // The four starts of a special from `first`, clockwise or not.
 export function specialStarts(kind, first, clockwise) {
   const ring = kind === "charge" ? sides : corners;
@@ -168,6 +204,8 @@ class DemonicBrutusEncounter {
     this.rotation = null; // { list, next }, chosen as the first special is due
     this.special = null;
     this.dashes = new Map(); // bull id -> { path, travelled, from }
+    this.pushTo = null; // the tile the player is pushed to this tick
+    this.walkOnlyUntil = 0; // a pushed player walks, not runs, before this tick
     this.ghosts = 0;
   }
   later(ticks, task) {
@@ -348,6 +386,14 @@ class DemonicBrutusEncounter {
     this.nextAt = lastBull + nextButtAfterLastBull;
     boss.untargetable = true;
     this.animate(context, bossActorId, "fadeOut");
+    // Too close to an obstacle: pushed into open space as he fades (moveDisplacedPlayer, this tick), and walking only
+    // till the special ends. The special is placed round the tile he is pushed to.
+    const open = openSpaceFor(player.position);
+    if (open && !sameTile(open, player.position)) {
+      this.pushTo = open;
+      this.walkOnlyUntil = this.special.endsAt;
+      this.special.pushedTo = [...open];
+    }
     this.scheduled(1, (ctx) => this.place(ctx, start, clockwise));
     // Each bull appears as its animation needs to land on its tick: a slam's fade-in stomp lands 2 ticks after it starts
     // (CACHE: its impact sound at frame 11 or 12, of 5 cycles each), a charge's fade-in run 1 tick after. So they appear
@@ -480,11 +526,29 @@ class DemonicBrutusEncounter {
     this.dashes.delete(id);
     if (context.world.getNpc(id)) context.despawnNpc(id);
   }
+  // The player's step, which the engine lets an encounter take over: the push as a special starts, and a pushed player
+  // held to a walk (one tile a tick) till it ends.
+  moveDisplacedPlayer(player, targetTile, place, playerStep) {
+    if (this.pushTo) {
+      const to = this.pushTo;
+      this.pushTo = null;
+      place(to, player.facing);
+      return true;
+    }
+    if (this.now < this.walkOnlyUntil && playerStep?.stepTiles?.length > 1) {
+      place(playerStep.stepTiles[0], player.facing);
+      return true;
+    }
+    return undefined;
+  }
+
   // A special cut short (his phase changes, or he dies): its ghosts go, its tasks are dropped.
   clearSpecial(context) {
     this.epoch++;
     for (const bull of this.special?.bulls ?? []) if (bull.id !== bossActorId && context.world.getNpc(bull.id)) context.despawnNpc(bull.id);
     this.dashes.clear();
+    this.pushTo = null;
+    this.walkOnlyUntil = 0;
     this.special = null;
     const boss = this.boss(context.world);
     if (boss) {
@@ -533,8 +597,10 @@ class DemonicBrutusEncounter {
           from: special.from,
           fadedAt: special.fadedAt,
           firstBullAt: special.firstBullAt,
+          endsAt: special.endsAt,
           clockwise: special.clockwise,
           at: special.at ? [...special.at] : null,
+          pushedTo: special.pushedTo ?? null,
           bulls: special.bulls.map((bull) => ({ id: bull.id, from: bull.from, corner: [...bull.corner] })),
           orbs: [...special.orbs],
         },

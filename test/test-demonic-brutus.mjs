@@ -18,6 +18,7 @@ async function ticksOf(name) {
         phase: state.phase,
         special: state.special,
         ghosts: [...engine.worldState.actors.values()].filter((actor) => actor.npcTypeId === 15629).length,
+        player: [...engine.player().position],
         // The player at a corner of him (diagonal to his footprint), where he can't butt.
         atCorner: (() => {
           const [px, py] = engine.player().position;
@@ -136,6 +137,19 @@ const specials = (ticks) =>
   const corners = when(ticks, (tick) => tick.atCorner && !tick.special);
   assert.ok(corners.every((tick) => !corners.includes(tick + 1)), `at a corner two ticks running: ${corners}`);
   assert.ok(when(ticks, (tick) => tick.butts.length).length >= 10);
+}
+
+{
+  // Beside the east fence as his first special starts: pushed into open space as he fades, the special placed round
+  // that tile, and a walk only (a tile a tick) till it ends, then running again (WIKI).
+  const ticks = await ticksOf("pushed");
+  const [first] = specials(ticks);
+  assert.ok(first.pushedTo, "pushed");
+  assert.deepEqual(ticks[first.fadedAt].player, first.pushedTo, "on the tile he is pushed to as he fades");
+  assert.deepEqual(first.at, first.pushedTo, "the special is round it");
+  const steps = (from, to) => ticks.slice(from, to).flatMap((tick, n) => (n && tick ? [Math.max(Math.abs(tick.player[0] - ticks[from + n - 1].player[0]), Math.abs(tick.player[1] - ticks[from + n - 1].player[1]))] : []));
+  assert.ok(steps(first.fadedAt + 1, first.endsAt).every((step) => step <= 1), "walking during the special");
+  assert.ok(steps(first.fadedAt + 1, first.endsAt).some((step) => step === 1), "and moving");
 }
 
 {

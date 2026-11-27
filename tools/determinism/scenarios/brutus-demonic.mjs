@@ -111,6 +111,21 @@ export const scenarios = [
     script() {},
   },
   {
+    // A player beside the east fence (64, 20) as the first special starts: pushed into open space, round which the
+    // special is placed, and walking, not running, as he dodges it.
+    name: "brutus_demonic/pushed",
+    kind: KIND,
+    seed: 3,
+    start: [64, 20],
+    ticks: 60,
+    mechanics: { infiniteHealth: true, infinitePrayer: true },
+    ...bare,
+    script(tick, api) {
+      run(api, tick);
+      dodge(api, tick);
+    },
+  },
+  {
     // Slams only (the setup's switch for the charge off).
     name: "brutus_demonic/slams-only",
     kind: KIND,
