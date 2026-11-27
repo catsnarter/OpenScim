@@ -33,7 +33,7 @@ import { buildActorVisualTarget } from "../shared/npcHelpers.js";
 import { isArenaFootprintWalkable } from "../shared/npcMovement.js";
 import { brutusPursuitMoves, besideHim } from "./movement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
-import { npcTypeIds, spotAnims, soundIds, mapSquare, mapSquareOffsets, bossSize, bossStart, playerStart } from "./ids.js";
+import { npcTypeIds, spotAnims, soundIds, mapSquare, mapSquareOffsets, bossSize, bossStart, playerStart, removedLocs } from "./ids.js";
 import { brutusLoadouts } from "./loadouts.js";
 import { stompTiles } from "./stomp.js";
 import { demonicBrutusKind, demonicBrutusFactory, demonicBrutusControls } from "./demonic.js";
@@ -43,6 +43,7 @@ export { stompTiles };
 export const brutusKind = "brutus";
 export const brutusMapSquare = mapSquare;
 export const brutusMapSquareOffsets = mapSquareOffsets;
+export const removedLocIds = new Set(removedLocs.map((loc) => loc.locId));
 export const bossActorId = "brutus";
 
 const attackSpeed = 5; // TABLE, WIKI, OBS: his attacks 5 ticks apart
@@ -405,7 +406,9 @@ export const brutusDefinition = {
     mapSquareOffsets: brutusMapSquareOffsets,
     playerStart,
     loadsMapLocs: true,
-    collision: { mode: "auto", seed: playerStart },
+    // The plant at 57,25 is gone in the fight's copy of the field (OBS). Collision leaves scenery out only by id: so too
+    // the two plants of that id on the field's west edge (49,14 and 51,10), which presentation.js doesn't draw either.
+    collision: { mode: "auto", seed: playerStart, excludedStaticLocIds: removedLocIds },
     victory: { title: "VICTORY", narrative: "BRUTUS DEFEATED", accent: "gold" },
     isWorkInProgress: true,
     // Demonic Brutus is a variant kind with an encounter of its own (demonic.js), in the same field, with the same setups.

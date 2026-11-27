@@ -1,7 +1,7 @@
 // Brutus (client/encounters/brutus/). He stands with his south-west tile at 61,23 (3 x 3) in the north-east corner of
-// the cow field; the player comes in at 57,24, west of him, where an obstacle (57,25) leaves no room to charge. The
-// scenarios that want his charge start the player south of him, at 62,16, where there is. The snapshot tells the special running (its name, a
-// stomp's tiles, a charge's direction) and the next. Each script decides from it and the tick alone.
+// the cow field; the player comes in at 57,24, west of him. Most scenarios start the player south of him, at 62,16.
+// The snapshot tells the special running (its name, a stomp's tiles, a charge's direction) and the next. Each script
+// decides from it and the tick alone.
 import { attack, protect, toggleRun } from "./common.mjs";
 
 const KIND = "brutus";

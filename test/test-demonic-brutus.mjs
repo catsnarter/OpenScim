@@ -130,7 +130,7 @@ const specials = (ticks) =>
 }
 
 {
-  // On the start tile, beside an obstacle: whenever a special leaves him at a corner of the player, he steps beside him
+  // On the start tile: whenever a special leaves him at a corner of the player, he steps beside him
   // the next tick (inferred: he can't butt from a corner), so he never stands there, and he goes on butting.
   const ticks = await ticksOf("start-tile");
   const corners = when(ticks, (tick) => tick.atCorner && !tick.special);

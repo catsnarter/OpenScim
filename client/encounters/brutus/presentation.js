@@ -4,12 +4,13 @@
 import { buildScene } from "../shared/buildScene.js";
 import { brutusKind, brutusMapSquare, brutusMapSquareOffsets, bossActorId } from "./encounter.js";
 import { demonicBrutusKind } from "./demonic.js";
-import { npcTypeIds, seqIds, spotAnims, demonicSeqIds, orbSpotAnims, bossStart, bossSize } from "./ids.js";
+import { npcTypeIds, seqIds, spotAnims, demonicSeqIds, orbSpotAnims, bossStart, bossSize, removedLocs } from "./ids.js";
 import { brutusAudio } from "./audio.js";
 
 const renderConfig = {
   terrainMapSquare: brutusMapSquare,
   mapSquareOffsets: brutusMapSquareOffsets,
+  locRender: { excludedLocs: removedLocs },
   primaryNpc: { actorId: bossActorId, npcTypeId: npcTypeIds.brutus, basePosition: bossStart, size: bossSize, deathSeqId: seqIds.death },
   spotAnimIds: [...new Set(Object.values(spotAnims))],
   preloadNpcTypes: [
@@ -32,6 +33,7 @@ const renderConfig = {
 const demonicRenderConfig = {
   terrainMapSquare: brutusMapSquare,
   mapSquareOffsets: brutusMapSquareOffsets,
+  locRender: { excludedLocs: removedLocs },
   primaryNpc: { actorId: bossActorId, npcTypeId: npcTypeIds.demonic, basePosition: bossStart, size: bossSize, deathSeqId: seqIds.death },
   spotAnimIds: [...new Set([...Object.values(spotAnims), ...Object.values(orbSpotAnims).flatMap((byStyle) => Object.values(byStyle))])],
   preloadNpcTypes: [

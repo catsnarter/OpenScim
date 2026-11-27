@@ -65,6 +65,15 @@ export const bossSize = 3; // CACHE, TABLE
 export const bossStart = [61, 23];
 export const playerStart = [57, 24];
 
+// Scenery that isn't in the fight's copy of the field (local tiles of map square 50,51). OBS: the plant at 57,25, beside
+// the player's start. The two others share its id, which collision leaves out by (encounter.js), on the field's west
+// edge: they aren't drawn either, so nothing is drawn where the player can walk.
+export const removedLocs = [
+  { localX: 57, localY: 25, locId: 1393 }, // CACHE: "Plant"
+  { localX: 49, localY: 14, locId: 1393 },
+  { localX: 51, localY: 10, locId: 1393 },
+];
+
 export const sameTile = (a, b) => a[0] === b[0] && a[1] === b[1];
 // Edge to edge, Chebyshev: 0 under him, 1 beside him (diagonally too).
 export const edgeDistance = (position, size, [x, y]) =>
