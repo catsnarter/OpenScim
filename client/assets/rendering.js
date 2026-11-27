@@ -9130,6 +9130,17 @@ var ObjType = class extends Type {
       a.readInt();
       a.readInt();
       this.readString(a);
+    } else if (e === 15 || e === 160 || e === 251) {
+      // Flags with no operands (RuneLite's ItemLoader: not tradeable, stackable 2, bronzeman); nothing here reads
+      // them. Before, each was skipped as unknown (#140).
+    } else if (e === 161) {
+      // A u16 count, then that many u16 (RuneLite's ItemLoader: holdingWhitelist; the Obligator's and Zorya's tome's
+      // are animation ids). Before, its operands were read as opcodes and the item cut short (#140).
+      const n = a.readUnsignedShort();
+      this.holdingWhitelist = [];
+      for (let t = 0; t < n; t++) {
+        this.holdingWhitelist.push(a.readUnsignedShort());
+      }
     } else if (e === 249) {
       this.params = Type.readParamsMap(a, this.params);
     } else {
