@@ -29,9 +29,10 @@
 // worlds, so their timings, ids and shares are taken, not their damage.
 // Numbers no source gives are marked inferred.
 //
-// Not yet: her poke (the fight starts as she rises); the woox walk's subtleties
-// beyond what the ticks give; her sounds; Salve amulet's and the dragon hunter
-// weapons' bonuses are the engine's (attributes "undead", "dragon").
+// She rises as the fight-start countdown ends, which stands in for her poke.
+// Not yet: the woox walk's subtleties beyond what the ticks give; her sounds;
+// Salve amulet's and the dragon hunter weapons' bonuses are the engine's
+// (attributes "undead", "dragon").
 import { getMonsterFormulaStats, getMonsterHitpoints } from "../../engine/monsterStats.js";
 import { createSeededRandom } from "../../engine/random.js";
 import { getDragonfireProtection } from "../../engine/consumables.js";
