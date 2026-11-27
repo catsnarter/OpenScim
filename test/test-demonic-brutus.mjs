@@ -18,6 +18,15 @@ async function ticksOf(name) {
         phase: state.phase,
         special: state.special,
         ghosts: [...engine.worldState.actors.values()].filter((actor) => actor.npcTypeId === 15629).length,
+        // Each bull's facing and the way to the player from its middle, in the game's 2048ths (0 south, 512 west).
+        facings: [...engine.worldState.actors.values()]
+          .filter((actor) => actor.id === "brutus" || actor.npcTypeId === 15629)
+          .map((actor) => {
+            const player = engine.player();
+            const dx = player.position[0] + 0.5 - actor.position[0] - actor.size / 2;
+            const dy = player.position[1] + 0.5 - actor.position[1] - actor.size / 2;
+            return { id: actor.id, facing: actor.lockedFacing ?? null, toPlayer: (Math.round(Math.atan2(-dx, -dy) * (2048 / (Math.PI * 2))) + 2048) % 2048 };
+          }),
         texts: events.filter((event) => event.type === "overhead_text").map((event) => event.overheadText),
         heals: events.filter((event) => event.type === "hitsplat_spawned" && event.hitsplatType === "heal").map((event) => event.amount),
         butts: events.filter((event) => event.type === "hit_applied" && event.targetId === "player" && event.attackKind === "melee_crush").map((event) => event.damage),
@@ -79,6 +88,10 @@ const specials = (ticks) =>
     for (const tick of bulls) for (const damage of ticks[tick].bulls) assert.ok(damage >= 45 && damage <= 56, `bull ${damage}`);
     // Three ghosts with him, gone once their bulls are done.
     assert.equal(ticks[special.fadedAt + 1].ghosts, 3);
+    // As they appear, he and each ghost face the player, and keep that facing (OBS: every ghost turned to him).
+    const facings = ticks[special.fadedAt + 1].facings;
+    assert.equal(facings.length, 4);
+    for (const bull of facings) assert.equal(bull.facing, bull.toPlayer, `${bull.id} at the fade ${special.fadedAt}`);
     assert.equal(ticks[special.firstBullAt + 6]?.ghosts ?? 0, 0);
   }
 }

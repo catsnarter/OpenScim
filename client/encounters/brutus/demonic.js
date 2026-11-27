@@ -33,7 +33,7 @@ import { reviveNpc } from "../../engine/npcState.js";
 import { createSeededRandom } from "../../engine/random.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
 import { rollNpcAttack } from "../shared/npcAttack.js";
-import { buildActorVisualTarget } from "../shared/npcHelpers.js";
+import { buildActorVisualTarget, faceActorToward } from "../shared/npcHelpers.js";
 import { getNpcPursuitMoves } from "../shared/npcMovement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
 import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart, edgeDistance } from "./ids.js";
@@ -345,7 +345,9 @@ class DemonicBrutusEncounter {
     }
     this.scheduled(lead + 3 + 1, (ctx) => {
       const now = this.boss(ctx.world);
-      if (now) now.untargetable = false;
+      if (!now) return;
+      now.untargetable = false;
+      delete now.lockedFacing;
     });
     return true;
   }
@@ -366,21 +368,29 @@ class DemonicBrutusEncounter {
       const corner = slamCorner(from, at);
       return { id, from, corner, tiles: demonicSlamTiles(corner, at) };
     });
+    // Each bull faces the player as it appears, and keeps that facing through its charge or slam (OBS: every ghost
+    // turned to the player; a charge runs straight at him). Brutus's is let go when the special ends.
+    const facePlayer = (actor) => {
+      faceActorToward(actor, player);
+      actor.lockedFacing = actor.facing;
+      return actor;
+    };
     for (const bull of special.bulls) {
       if (bull.id === bossActorId) {
         boss.position = [...bull.corner];
         boss.previousPosition = [...bull.corner];
+        facePlayer(boss);
         this.animate(context, bossActorId, start.kind === "charge" ? "chargeFadeIn" : "stompFadeIn");
         continue;
       }
-      context.spawnNpc(ghostDefinition.createActor({
+      context.spawnNpc(facePlayer(ghostDefinition.createActor({
         id: bull.id, kind: "npc", role: "npc", npcTypeId: npcTypeIds.demonicGhost, archetypeId: "brutus-ghost", size: bossSize, alive: true,
         position: [...bull.corner], previousPosition: [...bull.corner], facing: boss.facing, history: new Map(),
         untargetable: true, blocksNpcMovement: false, passThruNpcs: true,
         vitals: { hp: 1, maxHp: 1 },
         combat: { attackSpeed: 1, attackRange: 0, attackStyle: "typeless", nextActionTick: Infinity, targetId: null, lastAttackTick: null,
           animations: { idle: null, walk: null, run: null, attack: null, death: null } },
-      }, {}));
+      }, {})));
       this.animate(context, bull.id, start.kind === "charge" ? "ghostChargeFadeIn" : "ghostStompFadeIn");
     }
     if (this.phase === 2) {
@@ -435,7 +445,10 @@ class DemonicBrutusEncounter {
     this.dashes.clear();
     this.special = null;
     const boss = this.boss(context.world);
-    if (boss) boss.untargetable = false;
+    if (boss) {
+      boss.untargetable = false;
+      delete boss.lockedFacing;
+    }
   }
 
   onNpcDefeated(defeat, context, completionOwnership) {
