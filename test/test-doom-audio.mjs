@@ -4,11 +4,11 @@
 // the rules name is in the trimmed cache's list. A sound that is not in it
 // throws nothing: it is silent (docs/ADDING-AN-ENCOUNTER.md, section 7).
 import assert from "node:assert/strict";
-import { register } from "node:module";
 import { readCacheGroups } from "../tools/assets/cache-groups.mjs";
+import { installHooks } from "../tools/determinism/node-hooks.mjs";
 
 // delves.js imports what Node loads only through the harness's hooks.
-register(new URL("../tools/determinism/node-hooks.mjs", import.meta.url).href);
+installHooks();
 for (const name of ["self", "window"]) globalThis[name] ??= globalThis;
 const { doomAudio } = await import("../client/encounters/doom-of-mokhaiotl/audio.js");
 const { doomPresentation, doomDeepPresentation } = await import("../client/encounters/doom-of-mokhaiotl/presentation.js");
