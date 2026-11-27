@@ -9,15 +9,15 @@ export const npcTypeIds = {
 };
 
 export const seqIds = {
-  idle: 7947, // CACHE: the stand of her NPC type
+  idle: 7948, // CACHE: DS2_VORKATH_IDLE (7947 is DS2_VORKATH_WALK)
   wake: 7950, // CACHE, OBS (tsps): she rises, 210 cycles
   melee: 7951, // CACHE, OBS (tsps)
   breath: 7952, // CACHE, OBS (tsps): ranged, magic, every breath, and the ice
   acid: 7957, // CACHE, OBS (tsps): she channels the acid, 900 cycles
   high: 7960, // CACHE, OBS (tsps): the fireball and the spawn, thrown high
   death: 7949, // CACHE, OBS (tsps)
-  spawnIdle: 7887, // CACHE: the stand of the spawn's NPC type
-  spawnWalk: 7888, // CACHE: its walk
+  spawnIdle: 7888, // CACHE: DS2_SPAWN_READY
+  spawnWalk: 7887, // CACHE: DS2_SPAWN_WALK
   spawnExplode: 7890, // OBS (tsps docs/vorkath.md): ds2_spawn_attack, as it explodes
 };
 
