@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 850 } });
@@ -40,7 +38,7 @@ try {
   }
   for (const action of ["Push", "Pull", "Wave"]) {
     const kind = action === "Wave" ? "waves" : "roar";
-    await page.goto("http://127.0.0.1:8791/zebak/");
+    await page.goto(process.env.TEST_ORIGIN + "/zebak/");
     await page.waitForFunction(() => document.body.innerText.includes("580/580"));
     await page.waitForTimeout(2500);
     let bossPoint;

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 try {
   const page = await browser.newPage({viewport: {width: 1280, height: 850}});
   const errors = [];
@@ -43,7 +41,7 @@ try {
       await route.fulfill({response, body: source.replace(marker, marker + extra)});
     });
   }
-  await page.goto("http://127.0.0.1:8791/zebak/");
+  await page.goto(process.env.TEST_ORIGIN + "/zebak/");
   await page.waitForFunction(() => document.body.innerText.includes("580/580"));
   await page.mouse.click(640, 425);
   for (const enraged of [false, true]) {

@@ -15,6 +15,7 @@ import { replayMarkerStore, listenForReplayKeys } from "/replay/markers.js";
 import { attackTimerMetronomeStore, setAttackTimerHdHealthBars } from "/plugins/attackTimerMetronome.js";
 if (typeof window !== "undefined") listenForBlindfold(window);
 import { showPluginsPausedHint } from "/plugins/pluginsPausedHint.js";
+import { setLobbyPresenceActive, stopLobbyFollow } from "/net/lobbyLink.js";
 import { thrallSpells, THRALL_END_SOUND_ID } from "/engine/thralls.js";
 const zebakSoundSearch = location.pathname === "/zebak/" ? new URLSearchParams(location.search).get("sound") : null;
 import { toEsModule } from "./rolldown-runtime.js";
@@ -11546,9 +11547,6 @@ var EquipmentSettings = ({
               src: dm(hb),
               alt: h8.label,
               style: phe,
-              onError: (hr) => {
-                hr.currentTarget.style.display = "none";
-              },
             }));
       const hm =
         (hd
@@ -19060,6 +19058,10 @@ var TIPS = [
     device: "desktop",
   },
 ];
+var shellTip =
+  typeof document == "undefined"
+    ? null
+    : document.querySelector("#root .loading-tip-text")?.textContent;
 var STAGE_LABELS = {
   downloading: "Downloading Cache",
   extracting: "Extracting Archive",
@@ -19140,9 +19142,11 @@ var LoadingScreen = ({
       })(hp),
     [hp],
   );
-  const [hs, ht] = (0, React.useState)(() =>
-    Math.floor(Math.random() * TIPS.length),
-  );
+  // Starts on the tip index.html has had on screen since before this script.
+  const [hs, ht] = (0, React.useState)(() => {
+    const shown = hr.findIndex((hz) => hz.text === shellTip);
+    return shown >= 0 ? shown : Math.floor(Math.random() * TIPS.length);
+  });
   const [hu, hv] = (0, React.useState)(true);
   const hw = hr[hs % hr.length];
   (0, React.useEffect)(() => {
@@ -48627,6 +48631,8 @@ function AppShell({ devHarness: devHarness } = {}) {
               }
             }
             tP(true);
+            // Started from a boot pack: the whole cache may follow now.
+            cacheManagerRef.current.beginHydration();
             H.summary();
             Lwe();
           }
@@ -51052,6 +51058,8 @@ function AppShell({ devHarness: devHarness } = {}) {
         if (sW.replayMode || graphicsHeld) {
           return;
         }
+        // A click to walk (or on anything) ends Follow (client/net/follow.js).
+        stopLobbyFollow("walk");
         if (tp) {
           if (sY.kind === "lobby") {
             const tx = aZ[tp];
@@ -51163,6 +51171,7 @@ function AppShell({ devHarness: devHarness } = {}) {
         if (sW.replayMode || graphicsHeld) {
           return;
         }
+        stopLobbyFollow("walk");
         const tp = t2.groundItems.find((tw) => tw.id === tk);
         if (!tp) {
           return;
@@ -51233,6 +51242,14 @@ function AppShell({ devHarness: devHarness } = {}) {
     setArmedSpell: rk,
     previewTargetTile: previewTargetTile,
   });
+  // The lobby's presence (client/net/lobbyLink.js): only signed in, only in the lobby, not in a replay;
+  // stopped on leaving the lobby, on signing out and when the application goes.
+  const { user: lobbyUser } = Lye();
+  const lobbyPresenceActive = !!lobbyUser && sceneState.kind === "lobby" && !replay.replayMode;
+  (0, React.useEffect)(() => {
+    setLobbyPresenceActive(lobbyPresenceActive);
+  }, [lobbyPresenceActive]);
+  (0, React.useEffect)(() => () => setLobbyPresenceActive(false), []);
   const ru = (0, React.useRef)(simulationState);
   ru.current = simulationState;
   const rv = $ke({
@@ -51298,6 +51315,10 @@ function AppShell({ devHarness: devHarness } = {}) {
     ),
     setTargetTile: (0, React.useCallback)(
       (sP) => {
+        // A walk set from outside (a tutorial's adapter) ends Follow as a click does.
+        if (sP) {
+          stopLobbyFollow("walk");
+        }
         setTargetTile(sP);
         targetTileRef.current = sP;
       },

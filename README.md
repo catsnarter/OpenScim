@@ -16,10 +16,11 @@ it still has short machine names. See `ROADMAP.md` for the plan.
 
 ## Run
 
-Requires Node 22+ and, for the tests, Chrome.
+Requires Node 22+.
 
 ```sh
 npm install
+npx playwright-core install chromium-headless-shell   # the browser of the tests, once
 npm run assets       # game cache and media from public sources (about 230 MB download, once)
 npm run dev          # http://127.0.0.1:5173/
 ```
@@ -58,11 +59,21 @@ load to a black screen.
 ## Test
 
 ```sh
-npm test                                  # everything, one file at a time (about 7 minutes)
+npm test                                  # everything, several files at a time (about 2 minutes)
 npm test -- test/test-zebak-tide.mjs      # a single script
+npm test -- "test/test-zebak*.mjs"        # those that match
+npm test -- --changed                     # while working on a fight: skips the other fights' browser tests
 ```
 
-`npm test` starts its own server on port 8791.
+`npm test` starts its own servers (up to four, without source maps) on the
+first free ports from 8791 up, and gives each test the address of one as
+`TEST_ORIGIN`. Runs in several worktrees go
+side by side: they share the machine's processors through one pool of slots,
+half its processors unless `OPENSCIM_TEST_SLOTS` says otherwise, and a file
+that fails is run once more on its own before it counts as failed. `--changed`
+runs everything unless the branch has changed nothing but fights' own files
+(`tools/run-tests.mjs` says which); the run before a pull request is the whole
+one.
 
 `test/test-sound-synth.mjs` compares the sound synthesizer with the 392
 recordings the project used to ship. They are not in the repository; set
@@ -70,7 +81,10 @@ recordings the project used to ship. They are not in the repository; set
 `OpenScim-assets-backup.zip` next to the repository). Without them that
 comparison is skipped.
 
-Set `CHROME_PATH` if Chrome is not in `C:/Program Files/Google/Chrome/Application/`.
+The tests run in Playwright's headless shell (`tools/browser.mjs`). Set
+`CHROME_PATH` to run them in another browser. Not in an installed Chrome on
+Windows: each start of it fails one logon of your Windows account, and a run of
+the tests is enough of them to lock the account for ten minutes.
 
 ## Layout
 

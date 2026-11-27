@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 try {
   const page = await browser.newPage();
   await page.route("**/engine/SimulationEngine.js*", async route => {
@@ -14,7 +12,7 @@ try {
     assert.ok(body.includes(marker));
     await route.fulfill({response, body: body.replace(marker, marker + "if (options.encounter.kind === 'zebak') window.engine = this;")});
   });
-  await page.goto("http://127.0.0.1:8791/zebak/");
+  await page.goto(process.env.TEST_ORIGIN + "/zebak/");
   await page.waitForFunction(() => document.body.innerText.includes("580/580"));
   await page.mouse.click(600, 360);
   await page.waitForFunction(() => engine.worldState.tick > 0);

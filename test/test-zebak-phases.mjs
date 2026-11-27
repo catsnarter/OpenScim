@@ -1,11 +1,7 @@
 import { chromium } from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 import assert from "node:assert/strict";
-const b = await chromium.launch({
-  executablePath:
-    process.env.CHROME_PATH ||
-    "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const b = await chromium.launch(browserOptions);
 try {
   const p = await b.newPage({ viewport: { width: 1280, height: 850 } }),
     errors = [];
@@ -51,7 +47,7 @@ try {
           if ([5860,5836,5845,5904,5838,5851,5829,5881,5888,5863].includes(soundId))
             window.testRoarSources.push({id:soundId, when:h3, gain:h7.gain.value, channel:h2.channel});`) });
     });
-  await p.goto("http://127.0.0.1:8791/zebak/");
+  await p.goto(process.env.TEST_ORIGIN + "/zebak/");
   await p.waitForFunction(() => document.body.innerText.includes("580/580"));
   await p.waitForTimeout(2100);
   await p.mouse.click(640, 425);

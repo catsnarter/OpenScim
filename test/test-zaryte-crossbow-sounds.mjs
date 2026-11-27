@@ -4,11 +4,9 @@
 // checked, with only the bolt sounds nobody recorded left to say.
 import assert from "node:assert/strict";
 import {chromium} from "playwright-core";
+import { browserOptions } from "../tools/browser.mjs";
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  args: ["--enable-unsafe-swiftshader"],
-});
+const browser = await chromium.launch(browserOptions);
 try {
   const page = await browser.newPage();
   const errors = [];
@@ -39,7 +37,7 @@ try {
     assert.ok(body.includes(marker));
     await route.fulfill({response, body: body.replace(marker, marker + "window.engine=this;")});
   });
-  await page.goto("http://127.0.0.1:8791/zebak/");
+  await page.goto(process.env.TEST_ORIGIN + "/zebak/");
   await page.waitForFunction(() => window.engine?.objTypeLoader && engine.worldState.actors.has("zebak"));
   await page.locator(".loading-screen").waitFor({state: "hidden"});
   // The first click resumes the audio context. It is also a walk, taken on the next tick: let that tick pass, or the

@@ -91,6 +91,14 @@ function isDemonbaneAttack({ weaponId, spellId }) {
   return demonbaneSpellNameSet.has(spellId) || (weaponId !== undefined && demonbanePercentByWeaponId.has(getBaseItemId(weaponId)));
 }
 var DEMON_ATTRIBUTE = "demon";
+// Golembane (WIKI: Golembane weapons, Golem (attribute)): against a golem, the weapon's accuracy and damage are up by
+// its percentage, "stacks multiplicatively with the Slayer helmet's bonuses" (WIKI: Granite hammer), as demonbane does.
+var GOLEM_ATTRIBUTE = "golem";
+var golembanePercentByWeaponId = new Map([
+  [21742, 30], // Granite hammer
+  [25641, 15], // Barronite mace
+  [25643, 15], // Barronite mace (l): inferred, the same mace
+]);
 function percentToRatio(percent) {
   return {
     numerator: percent,
@@ -182,6 +190,17 @@ function getDemonbaneWeaponStages(formulaStageInput) {
     };
   }
 }
+function getGolembaneWeaponStages(formulaStageInput) {
+  const weaponId = formulaStageInput.weaponId;
+  const golembanePercent = weaponId === undefined ? undefined : golembanePercentByWeaponId.get(getBaseItemId(weaponId));
+  if (golembanePercent === undefined) {
+    return NO_FORMULA_STAGES;
+  }
+  return {
+    attackRollStages: [percentToRatio(100 + golembanePercent)],
+    maxHitStages: [percentToRatio(100 + golembanePercent)],
+  };
+}
 function computeFormulaStages(formulaStageInput) {
   const demonbaneSpellStages = formulaStageInput.targetAttributes.includes(DEMON_ATTRIBUTE)
     ? getDemonbaneSpellStages(formulaStageInput)
@@ -205,6 +224,8 @@ function computeFormulaStages(formulaStageInput) {
     return dragonHunterStages;
   } else if (formulaStageInput.targetAttributes.includes(DEMON_ATTRIBUTE)) {
     return getDemonbaneWeaponStages(formulaStageInput);
+  } else if (formulaStageInput.targetAttributes.includes(GOLEM_ATTRIBUTE)) {
+    return getGolembaneWeaponStages(formulaStageInput);
   } else {
     return NO_FORMULA_STAGES;
   }
