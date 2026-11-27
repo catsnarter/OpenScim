@@ -30,9 +30,10 @@ import { createSeededRandom } from "../../engine/random.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
 import { rollNpcAttack } from "../shared/npcAttack.js";
 import { buildActorVisualTarget } from "../shared/npcHelpers.js";
-import { getNpcPursuitMoves, isArenaFootprintWalkable } from "../shared/npcMovement.js";
+import { isArenaFootprintWalkable } from "../shared/npcMovement.js";
+import { brutusPursuitMoves, besideHim } from "./movement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
-import { npcTypeIds, spotAnims, soundIds, mapSquare, mapSquareOffsets, bossSize, bossStart, playerStart, edgeDistance } from "./ids.js";
+import { npcTypeIds, spotAnims, soundIds, mapSquare, mapSquareOffsets, bossSize, bossStart, playerStart } from "./ids.js";
 import { brutusLoadouts } from "./loadouts.js";
 import { stompTiles } from "./stomp.js";
 import { demonicBrutusKind, demonicBrutusFactory, demonicBrutusControls } from "./demonic.js";
@@ -227,7 +228,7 @@ class BrutusEncounter {
   bossMove(boss, context) {
     if (this.phase !== "fighting") return [];
     const special = this.special;
-    if (!special) return getNpcPursuitMoves(boss, context);
+    if (!special) return brutusPursuitMoves(boss, context);
     if (special.name !== "charge" || context.tick < special.setsOffAt || special.travelled >= special.path.length) return [];
     const path = special.path.slice(special.travelled, special.travelled + charge.tilesPerTick);
     special.travelled += path.length;
@@ -265,9 +266,7 @@ class BrutusEncounter {
     return { environmentalDamages: [], npcAttacks: [this.butt(boss, player, context)] };
   }
   inMeleeReach(boss, player) {
-    if (edgeDistance(boss.position, bossSize, player.position) !== 1) return false;
-    const [x, y] = player.position;
-    return (x >= boss.position[0] && x < boss.position[0] + bossSize) || (y >= boss.position[1] && y < boss.position[1] + bossSize);
+    return besideHim(boss.position, player.position);
   }
   butt(boss, player, context) {
     const attack = rollNpcAttack({

@@ -18,6 +18,12 @@ async function ticksOf(name) {
         phase: state.phase,
         special: state.special,
         ghosts: [...engine.worldState.actors.values()].filter((actor) => actor.npcTypeId === 15629).length,
+        // The player at a corner of him (diagonal to his footprint), where he can't butt.
+        atCorner: (() => {
+          const [px, py] = engine.player().position;
+          const [bx, by] = boss.position;
+          return (px === bx - 1 || px === bx + 3) && (py === by - 1 || py === by + 3);
+        })(),
         // Each bull's facing, and the way from its middle to the tile its special is round, in the game's 2048ths (0 south,
         // 512 west).
         facings: [...engine.worldState.actors.values()]
@@ -121,6 +127,15 @@ const specials = (ticks) =>
   const ticks = await ticksOf("dodged");
   assert.ok(specials(ticks).length >= 4);
   assert.deepEqual(when(ticks, (tick) => tick.bulls.length), []);
+}
+
+{
+  // On the start tile, beside an obstacle: whenever a special leaves him at a corner of the player, he steps beside him
+  // the next tick (inferred: he can't butt from a corner), so he never stands there, and he goes on butting.
+  const ticks = await ticksOf("start-tile");
+  const corners = when(ticks, (tick) => tick.atCorner && !tick.special);
+  assert.ok(corners.every((tick) => !corners.includes(tick + 1)), `at a corner two ticks running: ${corners}`);
+  assert.ok(when(ticks, (tick) => tick.butts.length).length >= 10);
 }
 
 {

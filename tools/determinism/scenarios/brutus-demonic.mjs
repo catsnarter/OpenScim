@@ -100,6 +100,17 @@ export const scenarios = [
     },
   },
   {
+    // A player who stands on the field's start tile (57, 24), beside an obstacle: a slam leaves him at a corner of the
+    // player, from where he steps beside him to butt (he can't from a corner).
+    name: "brutus_demonic/start-tile",
+    kind: KIND,
+    seed: 1,
+    ticks: 120,
+    mechanics: { infiniteHealth: true },
+    ...bare,
+    script() {},
+  },
+  {
     // Slams only (the setup's switch for the charge off).
     name: "brutus_demonic/slams-only",
     kind: KIND,

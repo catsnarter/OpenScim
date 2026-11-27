@@ -35,9 +35,10 @@ import { createSeededRandom } from "../../engine/random.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
 import { rollNpcAttack } from "../shared/npcAttack.js";
 import { buildActorVisualTarget, faceActorToward } from "../shared/npcHelpers.js";
-import { getNpcPursuitMoves } from "../shared/npcMovement.js";
+import { isArenaFootprintWalkable } from "../shared/npcMovement.js";
+import { brutusPursuitMoves, besideHim } from "./movement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
-import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart, edgeDistance } from "./ids.js";
+import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart } from "./ids.js";
 import { demonicSlamTiles } from "./stomp.js";
 
 export const demonicBrutusKind = "brutus_demonic";
@@ -101,10 +102,16 @@ export function chargeStart(side, [px, py]) {
   return { corner: [px - 2, py + far], direction: "S" };
 }
 
-// A charge's lane: every tile his 3x3 covers from where he stands to where he stops.
-export function chargeLane(corner, direction) {
+// A charge's lane: every tile his 3x3 covers from where he stands to where he stops, 7 tiles on, or short of the first
+// step `canStand` refuses.
+export function chargeLane(corner, direction, canStand = () => true) {
   const [dx, dy] = step[direction];
-  const path = Array.from({ length: charge.tiles }, (_, n) => [corner[0] + dx * (n + 1), corner[1] + dy * (n + 1)]);
+  const path = [];
+  for (let n = 1; n <= charge.tiles; n++) {
+    const next = [corner[0] + dx * n, corner[1] + dy * n];
+    if (!canStand(next, bossSize)) break;
+    path.push(next);
+  }
   const lane = new Set();
   for (const at of [corner, ...path]) for (const tile of footprint(at)) lane.add(key(tile));
   return { path, lane };
@@ -275,7 +282,7 @@ class DemonicBrutusEncounter {
       return [{ npcId: actor.id, path }];
     }
     if (actor.id !== bossActorId || this.special || this.phase === "dead") return [];
-    return getNpcPursuitMoves(actor, context);
+    return brutusPursuitMoves(actor, context);
   }
 
   // --- his turn -------------------------------------------------------------------
@@ -301,9 +308,7 @@ class DemonicBrutusEncounter {
     return { environmentalDamages: [], npcAttacks: [this.butt(boss, player, context)] };
   }
   inMeleeReach(boss, player) {
-    if (edgeDistance(boss.position, bossSize, player.position) !== 1) return false;
-    const [x, y] = player.position;
-    return (x >= boss.position[0] && x < boss.position[0] + bossSize) || (y >= boss.position[1] && y < boss.position[1] + bossSize);
+    return besideHim(boss.position, player.position);
   }
   butt(boss, player, context) {
     const attack = rollNpcAttack({
@@ -378,6 +383,9 @@ class DemonicBrutusEncounter {
       const id = n === 0 ? bossActorId : `brutus_ghost_${++this.ghosts}`;
       if (start.kind === "charge") {
         const { corner, direction } = chargeStart(from, at);
+        // He stops short of an obstacle, as Brutus's charge does (his ghosts pass through: they go); his lane is what he
+        // covers. Otherwise he could end behind one, out of the player's reach.
+        if (n === 0) return { id, from, corner, direction, ...chargeLane(corner, direction, isArenaFootprintWalkable) };
         return { id, from, corner, direction, ...chargeLane(corner, direction) };
       }
       const corner = slamCorner(from, at);
