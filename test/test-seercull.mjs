@@ -3,12 +3,12 @@
 // Ranged level and the arrow alone, costs all the energy, and takes its damage
 // off the target's Magic, once.
 import assert from "node:assert/strict";
-import { register } from "node:module";
 import { chromium } from "playwright-core";
 import { browserOptions } from "../tools/browser.mjs";
+import { installHooks } from "../tools/determinism/node-hooks.mjs";
 
 // The client's import graph reaches a stylesheet; the harness's hooks make it an empty module.
-register("../tools/determinism/node-hooks.mjs", import.meta.url);
+installHooks();
 globalThis.self ??= globalThis; // as the harness: PicoGL reads `self` when it loads
 globalThis.location ??= { pathname: "/" };
 const { selectPlayerAttackProfile } = await import("../client/engine/playerAttack/profiles.js");

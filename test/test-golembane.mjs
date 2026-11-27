@@ -4,10 +4,10 @@
 // a stage of the roll and of the maximum hit, beside the Slayer helmet's. Any
 // other weapon or target is as before.
 import assert from "node:assert/strict";
-import { register } from "node:module";
+import { installHooks } from "../tools/determinism/node-hooks.mjs";
 
 // The client's import graph reaches a stylesheet; the harness's hooks make it an empty module.
-register("../tools/determinism/node-hooks.mjs", import.meta.url);
+installHooks();
 globalThis.self ??= globalThis; // as the harness: PicoGL reads `self` when it loads
 globalThis.location ??= { pathname: "/" };
 const { selectPlayerAttackProfile } = await import("../client/engine/playerAttack/profiles.js");

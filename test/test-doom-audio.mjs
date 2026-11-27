@@ -8,15 +8,15 @@
 // fights of the harness each comes on the tick of what it goes with.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { register } from "node:module";
 import { readCacheGroups } from "../tools/assets/cache-groups.mjs";
 import { cacheZip, loadEnvironment, runScenario } from "../tools/determinism/harness.mjs";
+import { installHooks } from "../tools/determinism/node-hooks.mjs";
 
 // delves.js imports what Node loads only through the harness's hooks: the
-// harness registers them as it loads, without the cache this test does.
+// harness installs them as it loads, without the cache this test does.
 const fights = existsSync(cacheZip);
 if (fights) await loadEnvironment();
-else register(new URL("../tools/determinism/node-hooks.mjs", import.meta.url).href);
+else installHooks();
 for (const name of ["self", "window"]) globalThis[name] ??= globalThis;
 const { doomAudio } = await import("../client/encounters/doom-of-mokhaiotl/audio.js");
 const { doomPresentation, doomDeepPresentation } = await import("../client/encounters/doom-of-mokhaiotl/presentation.js");
