@@ -95,15 +95,18 @@ const leftOf = ([fx, fy]) => [-fy, fx];
 // holds one of these, turning only right after a cleave (t72 south, t73 north, held till the cleave at t78).
 const facingAngles = { S: 0, W: 512, N: 1024, E: 1536 };
 const smite = {
-  strikeTicks: 5, // OBS: the impact graphic on the player 5 ticks after her smite (t114 -> t119)
-  strikesEnraged: [5, 9, 11], // OBS: t190 -> t195, t199, t201; WIKI: "4 ticks after the first, ... 2 ticks after the second"
-  hitAfterTicks: 1, // OBS: each hitsplat the tick after its impact (t119 -> t120)
+  // OBS: the strike, its sounds (12070, 12071) and its hitsplat, 6 ticks after her smite (t114 -> t120); enraged 6, 10
+  // and 12 (t190 -> t196, t200, t202). WIKI: the tick to pray on is "4 ticks after ... the blue crackling first becomes
+  // visible" (OBS: its sounds from t+1, t+2) and, enraged, "4 ticks after the first, ... 2 ticks after the second".
+  strikeTicks: 6,
+  strikesEnraged: [6, 10, 12],
+  impactLeadTicks: 1, // OBS: the impact graphic on the player the tick before each strike (t119, t195, t199, t201)
   damage: [28, 32], // inferred: OBS 29 to 32 unprayed; WIKI her max hit 32
   prayedShare: 0.25, // WIKI: "Simply having the prayer overhead will reduce the damage by ~75%"
 };
-// Her next turn, from the tick a special ends: a sweep ends the tick after its last cleave, a smite on its last hit.
+// Her next turn, from the tick a special ends: the tick after its last cleave or its last strike.
 // OBS: the last cleave t90 -> t96, the smite's hit t120 -> t126; inferred the blast (t158 -> t160, t223 -> t226).
-const nextTurnAfterSpecialTicks = { blast: 3, sweep: attackSpeed - 1, smite: attackSpeed };
+const nextTurnAfterSpecialTicks = { blast: 3, sweep: attackSpeed - 1, smite: attackSpeed - 1 };
 
 const bossDefinition = defineNpc({
   id: "mad-angel",
@@ -454,13 +457,13 @@ class MadAngelEncounter {
   }
   // Lightning: once, or three strikes enraged (WIKI, OBS). Each strike is judged on its tick: Protect from Magic switched
   // on that very tick negates it and earns a maximum hit for the player's next attack; already on, it takes ~75% off;
-  // off, the strike lands whole. Its hitsplat the tick after.
+  // off, the strike lands whole, on that tick. Its impact graphic shows the tick before.
   startSmite(boss, player, context) {
     const strikes = this.enraged ? smite.strikesEnraged : [smite.strikeTicks];
-    this.special = { name: "smite", startedAt: context.tick, endsAt: context.tick + strikes[strikes.length - 1] + smite.hitAfterTicks, strikes: strikes.map((at) => context.tick + at) };
+    this.special = { name: "smite", startedAt: context.tick, endsAt: context.tick + strikes[strikes.length - 1] + 1, strikes: strikes.map((at) => context.tick + at) };
     this.animate(context, this.enraged ? "smite_enraged" : "smite", [onActor(this.enraged ? spotAnims.smiteEnraged : spotAnims.smite, boss)]);
     for (const at of strikes) {
-      this.later(at, (ctx) => {
+      this.later(at - smite.impactLeadTicks, (ctx) => {
         const you = ctx.world.getPlayer();
         if (you.alive && this.boss(ctx.world)?.alive) this.animate(ctx, null, [onActor(spotAnims.smiteImpact, you)]);
       });
@@ -471,8 +474,7 @@ class MadAngelEncounter {
     return player?.activePrayer === "ProtectMagic";
   }
   // WIKI: "activating the prayer at the same tick that the lightning strikes will fully negate the damage, as well as
-  // guarantee a maximum hit for the next attack"; a 1-tick flick switches it on that tick too. inferred: the tick of the
-  // strike is that of its impact graphic, 4 ticks after "the blue crackling first becomes visible".
+  // guarantee a maximum hit for the next attack"; a 1-tick flick switches it on that tick too.
   strike(context) {
     const player = context.world.getPlayer();
     if (!player.alive || !this.boss(context.world)?.alive || this.special?.name !== "smite") return;
@@ -481,7 +483,7 @@ class MadAngelEncounter {
     const roll = this.randomInt(smite.damage);
     const damage = perfect ? 0 : prayed ? Math.floor(roll * smite.prayedShare) : roll;
     if (perfect) this.maxHitEarned = true;
-    this.laterAfterMove(smite.hitAfterTicks, () => this.hurtFixed("Smite", damage));
+    this.hurtFixed("Smite", damage);
   }
   // A hit already judged: typeless, so that the prayer of the tick it lands on changes nothing.
   hurtFixed(source, damage) {

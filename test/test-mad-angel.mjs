@@ -119,18 +119,21 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   const rewarded = ticks.slice(spentAt + 1).find((tick) => tick?.bossHits.length)?.bossHits ?? [];
   const best = Math.max(...ticks.flatMap((tick) => tick?.bossHits ?? []));
   assert.ok(rewarded.some((damage) => damage >= Math.floor(best / 2)), "a sure hit of at least half the maximum: " + rewarded);
-  // WIKI: Protect from Magic switched on on the very tick a smite strikes negates it (the hitsplat a tick later, OBS), and
-  // the player's next attack is a maximum hit: the largest of his whole fight.
-  const strikes = ticksWith(ticks, (tick) => tick.graphics.includes(4013));
+  // WIKI: Protect from Magic switched on on the very tick a smite strikes negates it (OBS: the strike and its hitsplat
+  // the tick after the impact graphic), and the player's next attack is a maximum hit: the largest of his whole fight.
+  const strikes = ticksWith(ticks, (tick) => tick.graphics.includes(4013)).map((tick) => tick + 1);
   assert.ok(strikes.length >= 1);
   const maxHit = Math.max(...ticks.flatMap((tick) => tick?.bossHits ?? []));
   for (const tick of strikes) {
     assert.equal(ticks[tick].prayer, "ProtectMagic");
     assert.notEqual(ticks[tick - 1].prayer, "ProtectMagic");
-    assert.deepEqual(ticks[tick + 1].hits, [0], "negated at " + (tick + 1));
+    assert.deepEqual(ticks[tick].hits, [0], "negated at " + tick);
   }
-  const nextHit = ticks.findIndex((tick, n) => n > strikes[0] && tick?.bossHits.some((damage) => damage > 25));
-  assert.ok(ticks[nextHit].bossHits.includes(maxHit), "the next attack is a maximum hit");
+  // The attack that spends it (the tick the reward is gone) lands for the maximum.
+  const earned = ticks.findIndex((tick, n) => n >= strikes[0] && tick?.state.maxHitEarned);
+  const spent = ticks.findIndex((tick, n) => n > earned && tick && !tick.state.maxHitEarned);
+  assert.ok(earned > 0 && spent > earned);
+  assert.ok(ticks.slice(spent, spent + 3).some((tick) => tick?.bossHits.includes(maxHit)), "the next attack is a maximum hit");
   // OBS: her next standard attack 6 ticks after the last cleave (t90 -> t96).
   const lastCleave = cleaves.filter((tick) => tick <= cleaves[0] + 18).at(-1); // the first sweep's fourth
   assert.equal(clipTicks(ticks, "melee").find((tick) => tick > lastCleave), lastCleave + 6);
