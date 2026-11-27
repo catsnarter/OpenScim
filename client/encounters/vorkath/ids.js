@@ -18,7 +18,9 @@ export const seqIds = {
   death: 7949, // CACHE, OBS (tsps)
   spawnIdle: 7888, // CACHE: DS2_SPAWN_READY
   spawnWalk: 7887, // CACHE: DS2_SPAWN_WALK
-  spawnExplode: 7890, // OBS (tsps docs/vorkath.md): ds2_spawn_attack, as it explodes
+  spawnExplode: 7890, // OBS (tsps docs/vorkath.md; REC): ds2_spawn_attack, as it explodes
+  spawnLand: 7889, // OBS (REC, 10 of 10): the tick after it lands
+  spawnDeath: 7891, // OBS (REC, 9 kills): 3 ticks after the hit that kills it
 };
 
 export const spotAnims = {

@@ -1,12 +1,12 @@
 // Vorkath (https://oldschool.runescape.wiki/w/Vorkath), the post-quest dragon
 // in her crater on Ungael.
 //
-// She rises as the fight starts (immune for 7 ticks, her first attack 13 ticks
+// She rises as the fight starts (immune for 7 ticks, her first attack 8 ticks
 // in) and attacks every 5 ticks: ranged (up to 32), magic (30), melee (32, only
 // beside her), three breaths of dragonfire (up to 80 unprotected: the regular,
 // the venomous one and the one that switches the player's prayers off), and a
 // fireball thrown high at the player's tile (up to 121 on it, half beside it).
-// Every sixth turn is a special, the two in turn, the first after five:
+// Every seventh turn is a special, the two in turn:
 // - acid: pools all over the crater and one under the player, then 25 shots of
 //   rapid fire at his tile, one a tick, 25 to 41 to a player still on it; the
 //   acid burns 1 to 10 a tick and heals her as much; her damage taken is halved.
@@ -27,6 +27,9 @@
 // server/plugins/bosses/vorkath/ and docs/vorkath.md, which read the cache and
 // rsprox captures: 61 recordings, about 500 fights, most on Leagues or event
 // worlds, so their timings, ids and shares are taken, not their damage.
+// OBS (REC): three recordings of the game, 20261127-203033-vorkath,
+// 20261127-204038-vorkath_1 and 20261127-204656-vorkath_2 (7 kills, 126 standard
+// attacks, 15 acid phases, 10 spawns); where they and tsps differ, they win.
 // Numbers no source gives are marked inferred.
 //
 // She rises as the fight-start countdown ends, which stands in for her poke.
@@ -52,10 +55,9 @@ export const spawnActorId = "vorkath-spawn";
 
 const riseTick = 1; // inferred: she rises on the fight's first tick (in the game, a tick after the poke)
 const riseImmuneTicks = 7; // OBS (tsps): awake 7 ticks into the rise; untouchable till then
-const firstAttackTicks = 13; // OBS (tsps): her first attack 13 ticks into the rise
+const firstAttackTicks = 8; // OBS (REC, 7 of 7 kills): her first attack 8 ticks into the rise, a tick after she is awake (tsps: 13)
 const attackSpeed = 5; // TABLE, WIKI
-const standardsBeforeSpecial = 6; // WIKI: six standard attacks, then a special
-const firstSpecialHeadStart = 1; // OBS (tsps): the first special follows 5 standards (496 fights)
+const standardsBeforeSpecial = 6; // WIKI: six standard attacks, then a special; OBS (REC): the first one too, 7 of 7 kills, and 16 of 16 after
 const phaseRecheckTicks = 2; // OBS (tsps): during a special her turn waits 2 ticks at a time
 const maxHits = { melee: 32, ranged: 32, magic: 30 }; // WIKI: post-quest
 const fireballMax = 121; // WIKI
@@ -66,10 +68,13 @@ const spawnExplosionMax = 60; // WIKI: up to 60, by its hitpoints left
 const acidRapidShots = 25; // OBS (tsps)
 const acidFirstShotTicks = 4; // OBS (tsps)
 const acidForceEndTicks = 33; // OBS (tsps): the acid phase never runs longer
+const acidNextAttackTicks = 33; // OBS (REC, 12 of 12): her next attack 33 ticks after she starts the acid
 const acidPoolLandTicks = 3; // OBS (tsps): the pools land 3 ticks after the cast
 const freezeTicks = 100; // OBS (tsps): 60 seconds, or until the spawn is gone
 const spawnLandDistance = 8; // OBS (tsps): 297 of 317 spawns landed 8 tiles from the player (WIKI: 10)
 const spawnThrowTicks = 4; // OBS (tsps): the spawn lands 4 ticks after it is thrown
+const spawnDeathTicks = 5; // OBS (REC, 9 kills): the spawn is gone 5 ticks after the hit that kills it
+const spawnUnfreezeTicks = 3; // OBS (REC, 10 of 10): "You become unfrozen as you kill the spawn." 3 ticks after that hit
 const spawnFuseTicks = 60; // inferred (tsps): a spawn that never reaches him explodes where it is
 const fireballThrowTicks = 1; // OBS (tsps): the fireball leaves a tick after she rears up
 const fireballLandTicks = 4; // OBS (tsps): its impact 4 ticks after it leaves
@@ -143,7 +148,7 @@ class VorkathEncounter {
     this.pending = [];
     this.phase = "rising"; // "rising" | "active" | "acid" | "spawn" | "dead"
     this.nextAt = riseTick + firstAttackTicks;
-    this.attacks = firstSpecialHeadStart;
+    this.attacks = 0;
     this.nextSpecial = null; // drawn on the first tick: WIKI, the first is random
     this.pools = []; // [x, y] of the acid on the floor
     this.acid = null; // { startedAt, shots }
@@ -289,10 +294,12 @@ class VorkathEncounter {
     const [cx, cy] = centreOf(boss.position);
     return [cx + 2 * Math.sign(target[0] - cx), cy + 2 * Math.sign(target[1] - cy)];
   }
-  // A shot at the player: its flight's end in cycles, and the hit's delay in ticks (the first tick at or after it lands).
+  // A shot at the player: its flight's end in cycles, and the hit's delay in ticks. OBS (REC, 129 shots and
+  // breaths): the hitsplat comes on the last tick that starts before it lands, 2 ticks on for a flight ending at 80
+  // or 85 cycles, 3 at 90; the freeze and the spawn's throw of the icy breath come then too.
   shotTiming(boss, player) {
     const end = shot.base + shot.perTile * chebyshev(this.head(boss, player.position), player.position);
-    return { end, ticks: Math.max(1, Math.ceil(end / 30)) };
+    return { end, ticks: Math.max(1, Math.floor(end / 30)) };
   }
   shotVisual(spotAnimId, boss, player, end) {
     const from = this.head(boss, player.position);
@@ -374,6 +381,7 @@ class VorkathEncounter {
   // --- the acid ------------------------------------------------------------------------
   startAcid(boss, player, context) {
     this.phase = "acid";
+    this.nextAt = context.tick + acidNextAttackTicks;
     this.acid = { startedAt: context.tick, shots: 0 };
     const tiles = this.acidPoolTiles(boss, player);
     const from = centreOf(boss.position);
@@ -484,6 +492,9 @@ class VorkathEncounter {
           {},
         ));
         this.spawn = { bornAt: landed.tick, exploding: false };
+        this.later(1, (ctx) => {
+          if (ctx.world.getNpc(spawnActorId)?.alive) this.animate(ctx, "land", [], [], spawnActorId);
+        });
       });
     });
   }
@@ -529,10 +540,15 @@ class VorkathEncounter {
       this.endSpawn();
     });
   }
+  // OBS (REC): she attacks again as the spawn goes, on the tick it is gone (7 of 10; a tick off either way in the
+  // others): 14 to 16 ticks after her icy breath.
   endSpawn() {
     this.frozenUntil = -1;
     this.spawn = null;
-    if (this.phase === "spawn") this.phase = "active";
+    if (this.phase === "spawn") {
+      this.phase = "active";
+      this.nextAt = this.now;
+    }
   }
 
   // --- the player's hits ------------------------------------------------------------------
@@ -554,8 +570,12 @@ class VorkathEncounter {
   }
   onNpcDefeated(defeat, context, completionOwnership) {
     if (defeat.npcId === spawnActorId) {
-      // WIKI: killing it unfreezes the player.
-      if (this.spawn && !this.spawn.exploding) this.endSpawn();
+      // WIKI: killing it unfreezes the player. OBS (REC): 3 ticks after the hit; she stays immune until it is gone.
+      if (this.spawn && !this.spawn.exploding) {
+        this.spawn = null;
+        this.frozenUntil = defeat.tick + spawnUnfreezeTicks;
+        this.tasks.push({ tick: defeat.tick + spawnDeathTicks, task: () => this.endSpawn() });
+      }
       return;
     }
     if (defeat.npcId !== bossActorId) return;

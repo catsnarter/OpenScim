@@ -40,8 +40,8 @@ const renderConfig = {
       npcTypeId: npcTypeIds.spawn,
       idleSeqId: seqIds.spawnIdle,
       walkSeqId: seqIds.spawnWalk,
-      attackClips: { explode: seqIds.spawnExplode },
-      deathSeqId: seqIds.spawnExplode, // inferred: no death of its own was captured; it bursts as it goes
+      attackClips: { explode: seqIds.spawnExplode, land: seqIds.spawnLand },
+      deathSeqId: seqIds.spawnDeath,
     },
   ],
 };
