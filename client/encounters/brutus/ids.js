@@ -6,6 +6,30 @@
 export const npcTypeIds = {
   // CACHE, TABLE: Brutus (58 hitpoints, 3x3). OBS: 15626 is the one fought, in every recording.
   brutus: 15626,
+  // CACHE: COWBOSS_HARDMODE, Demonic Brutus (TABLE: 750 hitpoints), and COWBOSS_HARDMODE_GHOST, the ghosts that repeat
+  // his specials (model 60116; the same walk and stand as his).
+  demonic: 15628,
+  demonicGhost: 15629,
+};
+
+// Demonic Brutus's sequences and graphics (CACHE: AnimationID COW_BOSS_*, SpotanimID VFX_COWBOSS_HM_*). Which plays
+// when is inferred from their names: no recording of the fight has his ids yet (OBS: one video).
+export const demonicSeqIds = {
+  fadeOut: 13795, // COW_BOSS_CHARGE_START_FADE_OUT: as he fades at a special's start
+  chargeFadeIn: 13793, // COW_BOSS_CHARGING_FADE_IN_FADE_OUT: as he reappears for a charge
+  ghostChargeFadeIn: 13794, // COW_BOSS_GHOST_CHARGING_FADE_IN_FADE_OUT
+  ghostCharge: 13779, // COW_BOSS_GHOST_CHARGE
+  stompFadeIn: 13799, // COW_BOSS_STOMP_FADE_IN: as he reappears for a slam
+  ghostStompFadeIn: 13800, // COW_BOSS_GHOST_STOMP_FADE_IN
+  slam: 13791, // COW_BOSS_SPIRIT_STOMP
+  ghostSlam: 13792, // COW_BOSS_GHOST_SPIRIT_STOMP
+  ghostFadeOut: 13796, // COW_BOSS_GHOST_CHARGE_START_FADE_OUT: as a ghost goes
+};
+
+// Phase 2's orbs, one of each style: spawned over the player, and the splash on him as each lands.
+export const orbSpotAnims = {
+  spawn: { ranged: 3600, melee: 3601, magic: 3602 }, // VFX_COWBOSS_HM_SPAWN_*_01
+  impact: { ranged: 3594, melee: 3595, magic: 3596 }, // VFX_COWBOSS_HM_IMPACT_*_01
 };
 
 export const seqIds = {

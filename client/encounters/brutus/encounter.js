@@ -14,7 +14,8 @@
 // Both specials hit for 15 to 19 and ignore prayer.
 //
 // Not here: the charge he makes at a player who safespots him for 15 ticks
-// ("*huff*"), which passes through obstacles; and Demonic Brutus.
+// ("*huff*"), which passes through obstacles. Demonic Brutus, the hard
+// version, is the picker's other "Version" (demonic.js).
 //
 // Sources: WIKI Brutus and Brutus/Strategies; TABLE his stats
 // (client/data/monsters.js, 15626); CACHE his ids (ids.js); OBS six kills
@@ -30,6 +31,10 @@ import { getNpcPursuitMoves, isArenaFootprintWalkable } from "../shared/npcMovem
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
 import { npcTypeIds, spotAnims, soundIds, mapSquare, mapSquareOffsets, bossSize, bossStart, playerStart, edgeDistance } from "./ids.js";
 import { brutusLoadouts } from "./loadouts.js";
+import { stompTiles } from "./stomp.js";
+import { demonicBrutusKind, demonicBrutusFactory, demonicBrutusControls } from "./demonic.js";
+
+export { stompTiles };
 
 export const brutusKind = "brutus";
 export const brutusMapSquare = mapSquare;
@@ -67,38 +72,6 @@ const specialToggles = [
 const directions = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
 const key = ([x, y]) => x + "," + y;
 const inFootprint = (corner, [x, y]) => x >= corner[0] && x < corner[0] + bossSize && y >= corner[1] && y < corner[1] + bossSize;
-
-// The tiles a stomp lands on (WIKI: "a 3x1 area if adjacent, or an L shape if diagonal", "Both slam attacks also deal
-// damage on adjacent tiles beneath Brutus"; OBS: the graphic on the three tiles beside him toward the player). The side
-// is the player's as the snort sounds: beside him, the three tiles there and his own row next to them; at a corner, the
-// corner tile and the two beside it, and his own corner tile (inferred: the L's tiles).
-export function stompTiles(corner, player) {
-  const [bx, by] = corner;
-  const far = bx + bossSize - 1;
-  const top = by + bossSize - 1;
-  const sx = player[0] < bx ? -1 : player[0] > far ? 1 : 0;
-  const sy = player[1] < by ? -1 : player[1] > top ? 1 : 0;
-  const outside = [];
-  const beneath = [];
-  if (sx !== 0 && sy !== 0) {
-    const cx = sx < 0 ? bx - 1 : far + 1;
-    const cy = sy < 0 ? by - 1 : top + 1;
-    const ex = sx < 0 ? bx : far;
-    const ey = sy < 0 ? by : top;
-    outside.push([cx, cy], [cx, ey], [ex, cy]);
-    beneath.push([ex, ey]);
-  } else if (sx !== 0) {
-    const x = sx < 0 ? bx - 1 : far + 1;
-    const row = sx < 0 ? bx : far;
-    for (let y = by; y <= top; y++) outside.push([x, y]), beneath.push([row, y]);
-  } else {
-    // Toward the player north or south of him; under him (sy 0 too), the row he faces first: south (inferred).
-    const y = sy > 0 ? top + 1 : by - 1;
-    const row = sy > 0 ? top : by;
-    for (let x = bx; x <= far; x++) outside.push([x, y]), beneath.push([x, row]);
-  }
-  return { outside, all: [...outside, ...beneath] };
-}
 
 // The way he charges: toward the player, along the axis he's furthest on (inferred: OBS one charge, straight west at a
 // player beside him on the west).
@@ -426,9 +399,20 @@ export const brutusDefinition = {
     collision: { mode: "auto", seed: playerStart },
     victory: { title: "VICTORY", narrative: "BRUTUS DEFEATED", accent: "gold" },
     isWorkInProgress: true,
+    // Demonic Brutus is a variant kind with an encounter of its own (demonic.js), in the same field, with the same setups.
+    variants: [
+      { id: "brutus", encounterKind: brutusKind, name: "Brutus", subtitle: "58 hitpoints. Three stomps and a charge.", available: true, presetsKey: brutusKind },
+      {
+        id: "demonic", encounterKind: demonicBrutusKind, name: "Demonic Brutus",
+        subtitle: "750 hitpoints and a second phase. His charges and slams come with three ghosts, and orbs to pray against.", available: true, presetsKey: brutusKind,
+      },
+    ],
+    variantLabel: "Version",
     loadouts: brutusLoadouts,
   },
   controls: { defaultMechanicsConfig: { ...defaultMechanics }, mechanicsToggles: specialToggles, debugActions: [] },
+  variantFactories: { [demonicBrutusKind]: demonicBrutusFactory },
+  variantControls: { [demonicBrutusKind]: demonicBrutusControls },
 };
 export { brutusDefinition as definition };
 export const order = 87;
