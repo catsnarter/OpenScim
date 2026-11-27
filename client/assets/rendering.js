@@ -48226,7 +48226,7 @@ var SceneCompositor = class e {
     const v = Math.max(
       ...i.map(({ tileOffsetY: tileOffsetY }) => tileOffsetY + 64 - 1),
     );
-    this.setTerrainHeightsAndBounds({ tileHeights: [joinedSquareHeights(c, o, d, i)] }, {
+    this.setTerrainHeightsAndBounds({ ...m, tileHeights: [joinedSquareHeights(c, o, d, i), ...m.tileHeights.slice(1)] }, {
       minX: h,
       maxX: f,
       minY: u,
