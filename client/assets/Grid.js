@@ -8068,7 +8068,13 @@ document.addEventListener(
   "error",
   (event) => {
     const image = event.target;
-    if (!(image instanceof HTMLImageElement) || image.dataset.remoteIcon) {
+    if (!(image instanceof HTMLImageElement)) {
+      return;
+    }
+    // The host's icon failed too: hide the image rather than show a broken one. An image's own onError can't do
+    // this, since this listener (capture) has already set the host's URL when the first error reaches it (#104).
+    if (image.dataset.remoteIcon) {
+      image.style.display = "none";
       return;
     }
     const match = /\/assets\/items\/(\d+)\.png$/.exec(image.src);
