@@ -142,8 +142,9 @@ class BrutusEncounter {
       ...(sounds.length ? { brutusSounds: sounds.map(({ id, position }) => ({ id, position: [...position] })) } : {}),
     });
   }
+  // His overhead text, for 5 ticks: the game client's 150 cycles (3 seconds) (overheadCycle is in ticks).
   say(context, text) {
-    context.tickEvents.emit({ type: "overhead_text", anchor: { kind: "actor", actorId: bossActorId }, overheadText: text, overheadCycle: 90 });
+    context.tickEvents.emit({ type: "overhead_text", anchor: { kind: "actor", actorId: bossActorId }, overheadText: text, overheadCycle: 5 });
   }
 
   // --- what the engine always calls --------------------------------------------
