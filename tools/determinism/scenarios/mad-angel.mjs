@@ -8,6 +8,35 @@ import { attack, protect } from "./common.mjs";
 const KIND = "mad_angel";
 const BOSS = "mad-angel";
 
+const state = (api) => api.engine.getEncounterSnapshot().state;
+const boss = (api) => api.npcs().find((npc) => npc.id === BOSS);
+// The four ways she faces, and her left of each (encounter.js).
+const directions = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
+const leftOf = ([fx, fy]) => [-fy, fx];
+
+// On the ball's tile to bounce it; out of the half a cleave will sweep, to the corner of her opposite it. Returns true
+// when the player is busy with one of them.
+function counter(api) {
+  const special = state(api).special;
+  const position = api.player().position;
+  const go = (tile) => {
+    if (tile[0] === position[0] && tile[1] === position[1]) return true;
+    if (api.player().attackTarget !== null) attack(api, null); // with a target he walks to it, not to the tile
+    api.moveTo(...tile);
+    return true;
+  };
+  if (special?.name === "blast" && special.ball) return go(special.ball.tile);
+  if (special?.name === "sweep") {
+    const at = boss(api).position;
+    const front = directions[special.facing];
+    const left = leftOf(front);
+    const toSide = special.side === "left" ? left : [-left[0], -left[1]];
+    // Two tiles past her middle, away from both the front and the sword: behind her, on her other side.
+    return go([at[0] + 1 - 2 * (front[0] + toSide[0]), at[1] + 1 - 2 * (front[1] + toSide[1])]);
+  }
+  return false;
+}
+
 // The wiki's two melee setups (loadouts.js), worn.
 const obligator = {
   equipment: { head: 24419, cape: 21295, amulet: 29801, weapon: 34715, body: 24420, shield: 22322, legs: 24421, hands: 22981, boots: 31097, ring: 28307 },
@@ -19,6 +48,21 @@ const graniteHammer = {
 };
 
 export const scenarios = [
+  {
+    // Her mechanics countered: every ball bounced back to her, every cleave stepped out of; Protect from Melee, the
+    // Obligator. Infinite health: to her death.
+    name: "mad-angel/countered",
+    kind: KIND,
+    seed: 5,
+    ticks: 600,
+    mechanics: { infiniteHealth: true, infinitePrayer: true },
+    ...obligator,
+    script(tick, api) {
+      if (tick === 1) protect(api, "ProtectMelee");
+      if (counter(api)) return;
+      if (api.player().attackTarget !== BOSS) attack(api, BOSS);
+    },
+  },
   {
     // The whole fight with the Obligator, Protect from Melee on from the start: her three specials in turn, her
     // enrage at 350 and her death. Infinite health: to the end.

@@ -13,12 +13,9 @@
 // At 350 hitpoints she enrages ("...!"): her specials come quicker, and from
 // then on one after another, the three of them first.
 //
-// This is the foundation: her waking, her walk, her standard attack, the
-// order and the timing of her specials with every animation and graphic, the
-// enrage and her death. What a special does to the player and to her (the
-// ball's bounce and explosion, the cleaves' tiles, the smite's damage and its
-// perfect prayer, the accurate and maximum hits they earn) is not yet here:
-// the specials play and take their time, and hit nothing.
+// The blast and the sweep are whole. Not yet: the smite's damage and its
+// perfect prayer, and the accurate and maximum hits a dodge and a perfect
+// prayer earn: the smite plays and takes its time, and hits nothing.
 //
 // Sources: WIKI Mad Angel and Mad Angel/Strategies; TABLE her stats
 // (client/data/monsters.js, 16305); CACHE her ids (ids.js); OBS one kill
@@ -29,7 +26,7 @@ import { createSeededRandom } from "../../engine/random.js";
 import { defineNpc, NpcDefinitionRegistry } from "../shared/npcDefinitions.js";
 import { rollNpcAttack } from "../shared/npcAttack.js";
 import { buildActorVisualTarget } from "../shared/npcHelpers.js";
-import { getNpcPursuitMoves } from "../shared/npcMovement.js";
+import { getNpcPursuitMoves, isArenaFootprintWalkable } from "../shared/npcMovement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
 import { npcTypeIds, seqIds, spotAnims, mapSquare, bossSize, bossStart, playerStart } from "./ids.js";
 import { madAngelLoadouts } from "./loadouts.js";
@@ -60,10 +57,35 @@ const blast = {
   rethrowTicks: 1, // OBS: thrown again, as a projectile alone, the tick after it lands (landed t30, thrown t31, landed t36)
   flight: { startHeight: 220, endHeight: 30, slope: 40 }, // OBS: the projectile's heights and slope
   back: { cycles: 30, startHeight: 30, endHeight: 220, slope: 17 }, // OBS: back to her in 30 cycles
+  reach: 2, // OBS: every throw within 2 tiles of the player; WIKI: since 19 August 2026 it can be his own tile
+  bounceDamage: [18, 22], // WIKI; OBS 19, 20, 18
+  bounceHitTicks: 2, // OBS: her hitsplat 2 ticks after the ball comes back (t30 -> t32, t36 -> t38, t42 -> t44)
+  explosionDamage: [30, 35], // WIKI "30+"; OBS 33, 32 unprotected. inferred: 35 at most
+  explosionPrayedShare: 0.5, // WIKI: "can be reduced by ~50% with Protect from Magic"
 };
-const sweep = { cleaves: 4, cleavesEnraged: 6, everyTicks: 6, everyTicksEnraged: 4 }; // WIKI (4, 6), OBS: 6 and 4 ticks apart
+const sweep = {
+  cleaves: 4, // WIKI, OBS
+  cleavesEnraged: 6, // WIKI, OBS
+  everyTicks: 6, // OBS: t66 drawn, cleaves t72, t78, t84, t90
+  everyTicksEnraged: 4, // OBS: t160 drawn, cleaves t164 to t184
+  // OBS (15 cleaves, graphic 2184 on each tile swept): a cleave sweeps the half of the nave in front of her and on her
+  // sword's side, cut along a diagonal through her middle tile; the tiles on the diagonal by this margin (0 within 2
+  // tiles of the recording, the enraged ones 1).
+  margin: 0,
+  marginEnraged: 1,
+  damage: [22, 28], // inferred: OBS 11 to 14 through Protect from Melee, which WIKI halves it
+  prayedShare: 0.5, // WIKI: "Protect from Melee will reduce the damage from being caught in this attack by ~50%"
+};
+// The four ways she faces, and her left of each (as she faces south, her left is east).
+const directions = { N: [0, 1], E: [1, 0], S: [0, -1], W: [-1, 0] };
+const leftOf = ([fx, fy]) => [-fy, fx];
+// The engine's angle of each (computeFacingFromDelta, client/engine/SimulationEngine.js). OBS: through a sweep she
+// holds one of these, turning only right after a cleave (t72 south, t73 north, held till the cleave at t78).
+const facingAngles = { S: 0, W: 512, N: 1024, E: 1536 };
 const smite = { strikeTicks: 5, strikesEnraged: [5, 9, 11] }; // OBS: the impact on the player 5 ticks in; enraged 4 then 2 ticks apart
-const nextTurnAfterSpecialTicks = { blast: 3, sweep: attackSpeed, smite: attackSpeed }; // OBS: sweep t90 -> t96, smite t120 -> t126; inferred blast (t158 -> t160, t223 -> t226)
+// Her next turn, from the tick a special ends: a sweep ends the tick after its last cleave, a smite on its last hit.
+// OBS: the last cleave t90 -> t96, the smite's hit t120 -> t126; inferred the blast (t158 -> t160, t223 -> t226).
+const nextTurnAfterSpecialTicks = { blast: 3, sweep: attackSpeed - 1, smite: attackSpeed };
 
 const bossDefinition = defineNpc({
   id: "mad-angel",
@@ -91,6 +113,9 @@ class MadAngelEncounter {
   startRun() {
     this.now = 0;
     this.tasks = [];
+    this.postTasks = [];
+    this.pending = [];
+    this.arenaTiles = null;
     this.phase = "waking"; // "waking" | "fighting" | "dead"
     this.nextAt = wakeTick + firstAttackAfterTicks;
     this.standards = 0; // standard attacks since the last special ended
@@ -101,6 +126,10 @@ class MadAngelEncounter {
   }
   later(ticks, task) {
     this.tasks.push({ tick: this.now + ticks, task });
+  }
+  // A task for after the player has moved on its tick (processPostTick): what a landing or a cleave finds him on.
+  laterAfterMove(ticks, task) {
+    this.postTasks.push({ tick: this.now + ticks, task });
   }
   takeDueTask() {
     const index = this.tasks.findIndex((entry) => entry.tick <= this.now);
@@ -140,6 +169,7 @@ class MadAngelEncounter {
     if (!boss) return;
     boss.position = [...bossStart];
     boss.previousPosition = [...bossStart];
+    this.releaseFacing(boss);
   }
   createNpcs() {
     const hp = getMonsterHitpoints(npcTypeIds.madAngel); // TABLE: 755
@@ -168,8 +198,31 @@ class MadAngelEncounter {
     return [];
   }
   processPostTick(context) {
+    this.now = context.tick;
+    this.context = context;
+    for (let index = this.postTasks.findIndex((entry) => entry.tick <= this.now); index >= 0; index = this.postTasks.findIndex((entry) => entry.tick <= this.now)) {
+      this.postTasks.splice(index, 1)[0].task(context);
+    }
     if (this.outcome.phase === "resolving" && context.tick >= this.outcome.completionTick) this.outcome = { ...this.outcome, phase: "victory" };
-    return [];
+    const damages = this.pending;
+    this.pending = [];
+    return damages;
+  }
+  hurt(source, baseDamage, attackType, prayedShare) {
+    const player = this.context.world.getPlayer();
+    if (!player.alive) return;
+    this.pending.push({ source, baseDamage, attackType, prayerReduction: { type: "reduce", value: prayedShare }, playerPosition: [...player.position] });
+  }
+  // The tiles of the nave the player can stand on (the explosion's, and the cleaves' within it).
+  arena() {
+    if (!this.arenaTiles) {
+      this.arenaTiles = [];
+      for (let x = 0; x < 64; x++) for (let y = 0; y < 64; y++) if (isArenaFootprintWalkable([x, y], 1)) this.arenaTiles.push([x, y]);
+    }
+    return this.arenaTiles;
+  }
+  randomInt([low, high]) {
+    return low + Math.floor(this.random() * (high - low + 1));
   }
 
   // --- her turn ---------------------------------------------------------------------
@@ -231,43 +284,134 @@ class MadAngelEncounter {
   endSpecial(context) {
     const name = this.special.name;
     this.special = null;
+    if (name === "sweep") this.releaseFacing(this.boss(context.world));
     if (name !== "blast" || this.enraged) this.nextAt = Math.max(this.nextAt, context.tick + nextTurnAfterSpecialTicks[name]);
   }
-  // A ball of light thrown to a tile, three times. inferred: the tile is the player's or one beside it (OBS: within 2 of him;
-  // WIKI: since 19 August 2026 it can be his own). Not yet: the bounce, the explosion: all three throws go.
+  // A ball of light thrown to a tile near the player. On the tile as it lands, he bounces it back to her for 18 to 22, and
+  // she throws it again; three times. Off it, it explodes over the whole nave and the blast is over.
   startBlast(boss, player, context) {
     const flight = this.enraged ? blast.flightTicksEnraged : blast.flightTicks;
-    // The landings: the first a release and a flight after her throw, each next a rethrow and a flight after the last.
-    const landings = Array.from({ length: blast.throws }, (_, n) => blast.releaseTicks + flight + n * (blast.rethrowTicks + flight));
-    this.special = { name: "blast", startedAt: context.tick, endsAt: context.tick + landings[landings.length - 1] + 1, throws: [] };
+    this.special = { name: "blast", startedAt: context.tick, endsAt: Infinity, flight, throwsLeft: blast.throws, ball: null };
     this.animate(context, "blast", [onActor(spotAnims.blastThrow, boss)]);
-    landings.forEach((landsAfter, n) => this.later(landsAfter - flight, (ctx) => this.releaseBall(ctx, flight, n)));
+    this.later(blast.releaseTicks, (ctx) => this.releaseBall(ctx));
   }
-  releaseBall(context, flight) {
+  // inferred: any tile within 2 of the player he can stand on (OBS: all within 2).
+  ballTile(player) {
+    const tiles = [];
+    for (let dx = -blast.reach; dx <= blast.reach; dx++) {
+      for (let dy = -blast.reach; dy <= blast.reach; dy++) {
+        const tile = [player.position[0] + dx, player.position[1] + dy];
+        if (isArenaFootprintWalkable(tile, 1)) tiles.push(tile);
+      }
+    }
+    return tiles.length ? tiles[Math.floor(this.random() * tiles.length)] : [...player.position];
+  }
+  releaseBall(context) {
     const boss = this.boss(context.world);
     const player = context.world.getPlayer();
-    if (!boss?.alive || this.special?.name !== "blast") return;
-    const tile = [player.position[0] + Math.floor(this.random() * 3) - 1, player.position[1] + Math.floor(this.random() * 3) - 1];
+    const special = this.special;
+    if (!boss?.alive || special?.name !== "blast") return;
+    const tile = this.ballTile(player);
     const from = centreOf(boss.position);
-    this.special.throws.push({ tile, landsAt: context.tick + flight });
+    special.ball = { tile, landsAt: context.tick + special.flight };
     this.animate(
       context,
       null,
       [onTile(spotAnims.shadow, tile)],
-      [{ spotAnimId: spotAnims.ball, sourcePosition: [from[0] + 0.5, from[1] + 0.5], target: { kind: "tile", position: [...tile] }, startDelayCycles: 0, endDelayCycles: flight * 30, slope: blast.flight.slope, startOffset: 0, startHeight: blast.flight.startHeight, endHeight: blast.flight.endHeight }],
+      [{ spotAnimId: spotAnims.ball, sourcePosition: [from[0] + 0.5, from[1] + 0.5], target: { kind: "tile", position: [...tile] }, startDelayCycles: 0, endDelayCycles: special.flight * 30, slope: blast.flight.slope, startOffset: 0, startHeight: blast.flight.startHeight, endHeight: blast.flight.endHeight }],
     );
+    this.laterAfterMove(special.flight, (ctx) => this.landBall(ctx));
   }
-  // She draws her sword to a side and cleaves. Not yet: which side the player is on, the tiles a cleave sweeps, its damage.
+  landBall(context) {
+    const boss = this.boss(context.world);
+    const player = context.world.getPlayer();
+    const special = this.special;
+    if (!boss?.alive || special?.name !== "blast" || !special.ball) return;
+    const { tile } = special.ball;
+    special.ball = null;
+    if (player.alive && player.position[0] === tile[0] && player.position[1] === tile[1]) {
+      // OBS: back to her in 30 cycles, the bounce graphic on her as it arrives, her hitsplat 2 ticks on.
+      this.animate(
+        context,
+        null,
+        [onActor(spotAnims.bounce, boss, blast.back.cycles)],
+        [{ spotAnimId: spotAnims.ball, sourcePosition: [tile[0] + 0.5, tile[1] + 0.5], target: buildActorVisualTarget(boss), startDelayCycles: 0, endDelayCycles: blast.back.cycles, slope: blast.back.slope, startOffset: 0, startHeight: blast.back.startHeight, endHeight: blast.back.endHeight }],
+      );
+      context.queueNpcHit({ attackerId: bossActorId, targetId: bossActorId, style: "typeless", attackKind: "typeless", rolledDamage: this.randomInt(blast.bounceDamage), accuracySucceeded: true, impactDelayTicks: blast.bounceHitTicks, sourceDeathPolicy: "persist" });
+      special.throwsLeft--;
+      if (special.throwsLeft > 0) this.later(blast.rethrowTicks, (ctx) => this.releaseBall(ctx));
+      else special.endsAt = context.tick + 1;
+      return;
+    }
+    // OBS: the explosion's graphic on every tile of the nave, the player hit on the same tick; nothing thrown after it.
+    this.animate(context, null, this.arena().map((each) => onTile(spotAnims.explosion, each)));
+    this.hurt("Exploding light", blast.explosionDamage, "magic", blast.explosionPrayedShare);
+    special.endsAt = context.tick + 1;
+  }
+  // She draws her sword to a side and cleaves, four times (six enraged). Each cleave sweeps the half of the nave in front
+  // of her and on her sword's side; she faces where the player was at the last swing. When he is on her other side, the
+  // cleave goes across and the sword stays there. Out of the half (the side opposite the sword, or behind her) he is safe.
+  // inferred: the side she draws to first (OBS: left twice, right once).
   startSweep(boss, player, context) {
     const cleaves = this.enraged ? sweep.cleavesEnraged : sweep.cleaves;
     const every = this.enraged ? sweep.everyTicksEnraged : sweep.everyTicks;
-    const side = this.random() < 0.5 ? "left" : "right"; // inferred: the side she draws to
-    const clips = this.enraged ? `${side}Enraged` : side;
-    this.special = { name: "sweep", startedAt: context.tick, endsAt: context.tick + cleaves * every, side };
-    this.animate(context, `sweep_${clips}_draw`);
-    for (let n = 1; n <= cleaves; n++) {
-      this.later(n * every, (ctx) => this.animate(ctx, n === cleaves ? `sweep_${side}_reset` : `sweep_${clips}_cleave`));
-    }
+    const side = this.random() < 0.5 ? "left" : "right";
+    this.special = { name: "sweep", startedAt: context.tick, endsAt: context.tick + cleaves * every + 1, side, facing: this.quadrantOf(boss, player), cleaves, swept: [] };
+    this.holdFacing(boss, this.special.facing);
+    this.animate(context, this.sweepClip(side, "draw"));
+    for (let n = 1; n <= cleaves; n++) this.laterAfterMove(n * every, (ctx) => this.cleave(ctx, n));
+  }
+  // She holds the way she faces through the sweep: the engine turns no NPC with `lockedFacing` to its target.
+  holdFacing(boss, facing) {
+    boss.facing = facingAngles[facing];
+    boss.lockedFacing = facingAngles[facing];
+  }
+  releaseFacing(boss) {
+    if (boss) delete boss.lockedFacing;
+  }
+  sweepClip(side, step) {
+    // CACHE: enraged she has her own draw, cleave and across, and the reset of her calm sweep (OBS: 14432 at t184).
+    return step !== "reset" && this.enraged ? `sweep_${side}Enraged_${step}` : `sweep_${side}_${step}`;
+  }
+  // Her middle tile, and the player from it.
+  offsetOf(boss, player) {
+    const [cx, cy] = centreOf(boss.position);
+    return [player.position[0] - cx, player.position[1] - cy];
+  }
+  quadrantOf(boss, player) {
+    const [u, v] = this.offsetOf(boss, player);
+    if (Math.abs(u) > Math.abs(v)) return u > 0 ? "E" : "W";
+    return v > 0 ? "N" : "S";
+  }
+  // The half a cleave sweeps: in front of her and on her sword's side.
+  sweptBy(boss, facing, side) {
+    const front = directions[facing];
+    const left = leftOf(front);
+    const toSide = side === "left" ? left : [-left[0], -left[1]];
+    const margin = this.enraged ? sweep.marginEnraged : sweep.margin;
+    const [cx, cy] = centreOf(boss.position);
+    return (tile) => (tile[0] - cx) * (front[0] + toSide[0]) + (tile[1] - cy) * (front[1] + toSide[1]) >= margin;
+  }
+  cleave(context, n) {
+    const boss = this.boss(context.world);
+    const player = context.world.getPlayer();
+    const special = this.special;
+    if (!boss?.alive || special?.name !== "sweep") return;
+    const inHalf = this.sweptBy(boss, special.facing, special.side);
+    const underBoss = (tile) => tile[0] >= boss.position[0] && tile[0] < boss.position[0] + bossSize && tile[1] >= boss.position[1] && tile[1] < boss.position[1] + bossSize;
+    const swept = this.arena().filter((tile) => inHalf(tile) && !underBoss(tile));
+    special.swept = swept;
+    // Across when he is on her other side; the last cleave is her reset.
+    const left = leftOf(directions[special.facing]);
+    const [u, v] = this.offsetOf(boss, player);
+    const lateral = u * left[0] + v * left[1];
+    const across = lateral !== 0 && (lateral > 0 ? "left" : "right") !== special.side;
+    const clip = n === special.cleaves ? this.sweepClip(special.side, "reset") : this.sweepClip(special.side, across ? "across" : "cleave");
+    this.animate(context, clip, swept.map((tile) => onTile(spotAnims.cleave, tile)));
+    if (player.alive && inHalf(player.position)) this.hurt("Sweep", sweep.damage, "melee", sweep.prayedShare);
+    if (across) special.side = special.side === "left" ? "right" : "left";
+    special.facing = this.quadrantOf(boss, player);
+    if (n < special.cleaves) this.holdFacing(boss, special.facing);
   }
   // Lightning: once, or three strikes enraged. Not yet: its damage, Protect from Magic, the perfect prayer.
   startSmite(boss, player, context) {
@@ -293,6 +437,8 @@ class MadAngelEncounter {
     if (defeat.npcId !== bossActorId) return;
     this.phase = "dead";
     this.tasks = [];
+    this.postTasks = [];
+    this.pending = [];
     this.special = null;
     if (completionOwnership !== "encounter-owned") return;
     this.outcome = { phase: "resolving", decisiveTick: defeat.tick, completionTick: defeat.tick + deathTicks, primaryActorId: bossActorId, completionActorIds: [bossActorId] };
@@ -309,7 +455,14 @@ class MadAngelEncounter {
         standardsSinceSpecial: this.standards,
         nextSpecial: specialOrder[this.nextSpecial],
         nextAttackAt: this.nextAt,
-        special: this.special && { name: this.special.name, startedAt: this.special.startedAt, endsAt: this.special.endsAt, side: this.special.side ?? null },
+        special: this.special && {
+          name: this.special.name,
+          startedAt: this.special.startedAt,
+          endsAt: Number.isFinite(this.special.endsAt) ? this.special.endsAt : null,
+          side: this.special.side ?? null,
+          facing: this.special.facing ?? null,
+          ball: this.special.ball ? { tile: [...this.special.ball.tile], landsAt: this.special.ball.landsAt } : null,
+        },
       },
       visuals: {},
     };
