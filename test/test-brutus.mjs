@@ -31,14 +31,18 @@ const gaps = (list) => list.slice(1).map((value, n) => value - list[n]);
   // The encounter's own helpers, loaded once the harness has run a scenario and installed its module hooks.
   await ticksOf("stomps-only");
   const { stompTiles, chargeDirection } = await import("../client/encounters/brutus/encounter.js");
-  // The tiles of a stomp: beside him, the three there and his row next to them (WIKI: "3x1", "adjacent tiles beneath
-  // Brutus"; OBS: the graphic on the three beside him); at a corner, an L and his corner tile.
-  const west = stompTiles([10, 10], [9, 11]);
-  assert.deepEqual(west.outside, [[9, 10], [9, 11], [9, 12]]);
-  assert.deepEqual(west.all.slice(3), [[10, 10], [10, 11], [10, 12]]);
-  const corner = stompTiles([10, 10], [13, 13]);
-  assert.deepEqual(corner.outside, [[13, 13], [13, 12], [12, 13]]);
-  assert.deepEqual(corner.all.slice(3), [[12, 12]]);
+  // The tiles of a stomp, as four recorded ones drew them (OBS, world tiles; WIKI: "3x1", "an L shape if diagonal",
+  // "adjacent tiles beneath Brutus"): beside the middle of his south edge, the three there; at the end of an edge, or
+  // under him at his corner, an L of five round that corner; under him at his east column, the line east. Each hits on
+  // his own nine tiles too.
+  const sorted = (tiles) => tiles.map(([x, y]) => x + "," + y).sort();
+  assert.deepEqual(sorted(stompTiles([3259, 3290], [3260, 3289]).outside), sorted([[3259, 3289], [3260, 3289], [3261, 3289]]));
+  assert.deepEqual(sorted(stompTiles([3256, 3285], [3258, 3288]).outside), sorted([[3257, 3288], [3258, 3288], [3259, 3288], [3259, 3287], [3259, 3286]]));
+  assert.deepEqual(sorted(stompTiles([3258, 3289], [3260, 3289]).outside), sorted([[3259, 3288], [3260, 3288], [3261, 3288], [3261, 3289], [3261, 3290]]));
+  assert.deepEqual(sorted(stompTiles([3258, 3291], [3260, 3292]).outside), sorted([[3261, 3291], [3261, 3292], [3261, 3293]]));
+  const all = stompTiles([3258, 3291], [3260, 3292]).all;
+  assert.equal(all.length, 12);
+  assert.ok(sorted(all).includes("3259,3292"), "his middle tile");
   // The charge: toward the player on his furthest axis.
   assert.equal(chargeDirection([10, 10], [5, 11]), "W");
   assert.equal(chargeDirection([10, 10], [11, 20]), "N");
@@ -46,7 +50,7 @@ const gaps = (list) => list.slice(1).map((value, n) => value - list[n]);
 {
   // Standing still, undefended: his butts 5 ticks apart (TABLE, OBS), none above 3 (WIKI); his first special after two
   // butts, then four between (OBS); three snorts 8 ticks apart, each stomp landing 4 ticks on (OBS); a growl, his
-  // charge landing 4 ticks on (OBS) after a 7-tile dash in two ticks (OBS); the specials in turn (WIKI, OBS); each
+  // charge landing 4 ticks on (OBS) after a dash of up to 7 tiles in two ticks (OBS); the specials in turn (WIKI, OBS); each
   // special 15 to 19 (WIKI).
   const ticks = await ticksOf("standing");
   const butts = when(ticks, (tick) => tick.butts.length > 0);
@@ -62,7 +66,10 @@ const gaps = (list) => list.slice(1).map((value, n) => value - list[n]);
   for (const growl of growls) {
     assert.ok(specials.includes(growl + 4), "a charge lands 4 ticks after its growl: " + growl);
     const [from, to] = [ticks[growl].boss, ticks[growl + 5].boss];
-    assert.equal(Math.abs(to[0] - from[0]) + Math.abs(to[1] - from[1]), 7, "a 7-tile dash");
+    const dash = Math.abs(to[0] - from[0]) + Math.abs(to[1] - from[1]);
+    assert.ok(dash >= 4 && dash <= 7, `a dash of 4 to 7 tiles (OBS): ${dash}`);
+    // His next butt no sooner than 8 ticks after the growl (OBS).
+    assert.ok(butts.filter((n) => n > growl)[0] >= growl + 8, "his next butt 8 ticks after the growl or later: " + growl);
   }
   // In turn: a stomp's three snorts, then a growl, then three snorts...
   const order = [...snorts.map((n) => [n, "stomp"]), ...growls.map((n) => [n, "charge"])].sort((a, b) => a[0] - b[0]).map(([, name]) => name);

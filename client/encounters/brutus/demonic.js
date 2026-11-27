@@ -37,7 +37,7 @@ import { buildActorVisualTarget } from "../shared/npcHelpers.js";
 import { getNpcPursuitMoves } from "../shared/npcMovement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
 import { npcTypeIds, demonicSeqIds, orbSpotAnims, spotAnims, bossSize, bossStart, playerStart, edgeDistance } from "./ids.js";
-import { stompTiles } from "./stomp.js";
+import { demonicSlamTiles } from "./stomp.js";
 
 export const demonicBrutusKind = "brutus_demonic";
 export const bossActorId = "brutus";
@@ -340,7 +340,7 @@ class DemonicBrutusEncounter {
     this.scheduled(1, (ctx) => this.appear(ctx, start, clockwise));
     for (let n = 0; n < 4; n++) {
       this.scheduled(lead + n, (ctx) => this.bullSetsOff(ctx, n));
-      this.scheduled(lead + n, (ctx) => this.bullLands(ctx, n), true);
+      this.scheduled(lead + n, (ctx) => this.bullLands(ctx, n));
     }
     this.scheduled(lead + 3 + 1, (ctx) => {
       const now = this.boss(ctx.world);
@@ -363,7 +363,7 @@ class DemonicBrutusEncounter {
         return { id, from, corner, direction, ...chargeLane(corner, direction) };
       }
       const corner = slamCorner(from, at);
-      return { id, from, corner, tiles: stompTiles(corner, at) };
+      return { id, from, corner, tiles: demonicSlamTiles(corner, at) };
     });
     for (const bull of special.bulls) {
       if (bull.id === bossActorId) {
@@ -397,7 +397,8 @@ class DemonicBrutusEncounter {
     this.animate(context, bull.id, clip);
     if (charging) this.dashes.set(bull.id, { path: bull.path, travelled: 0 });
   }
-  // After the player has moved on the bull's tick: what it finds him on, and (phase 2) its orb.
+  // As the bull's tick starts, before the player moves (as Brutus's stomp and charge, OBS): what it finds him on, and
+  // (phase 2) its orb.
   bullLands(context, n) {
     const special = this.special;
     const bull = special?.bulls[n];

@@ -6,11 +6,14 @@
 // Protect from Melee stops. After two standard attacks, then four between
 // each, he uses one of two specials, the first at random, then in turn:
 // - stomp ("*snorts*"): three stomps, 8 ticks apart, each landing 4 ticks
-//   after its snort on the tiles beside him toward the player (three in a row
-//   beside him, or an L at a corner) and the row of him above them. Step back
-//   a tile to dodge.
-// - charge ("*growls*"): he dashes in a straight line toward the player, 4
-//   ticks after the growl, hitting him if he's in its lane. Step to the side.
+//   after its snort on the tiles beside him toward the player (three along
+//   an edge, or an L of five round a corner) and on his own. Step back a tile
+//   to dodge.
+// - charge ("*growls*"): he dashes in a straight line toward the player, up
+//   to 7 tiles, 4 ticks after the growl, hitting him if he's in its lane.
+//   Step to the side.
+// Each lands on the tile the player stands on as its tick starts: a step
+// taken on that tick is too late (OBS).
 // Both specials hit for 15 to 19 and ignore prayer.
 //
 // Not here: the charge he makes at a player who safespots him for 15 ticks
@@ -55,10 +58,14 @@ const stomp = {
   nextTurnTicks: 24, // OBS: the first snort t10, his next attack t34
 };
 const charge = {
-  setOffTicks: 4, // OBS: the growl t54, the hit t58; WIKI: "a 3 tick (1.8s) window to move out of the way"
-  tiles: 7, // OBS: from x 3262 to 3255 (his middle). WIKI: "Dash forward 4 Tiles": the recording is followed
+  setOffTicks: 4, // OBS: the growl, and the hit 4 ticks on, in all 5 charges recorded; WIKI: "a 3 tick (1.8s) window"
+  // OBS: 7 tiles where there was room (two charges), 6, 5 and 4 where a fence stopped him; WIKI: "Dash forward 4 Tiles".
+  tiles: 7,
+  // He charges only with room for 4 or more (inferred: OBS the shortest, 4; WIKI: "the attack is not used if the charge
+  // would hit a wall").
+  minTiles: 4,
   tilesPerTick: 4, // inferred: the 7 tiles in two ticks (OBS: still at t54, 7 tiles on by t60)
-  nextTurnTicks: 6, // OBS: his animation over t60. inferred: he walks back to the player from then
+  nextTurnTicks: 8, // OBS: his next butt 8 ticks after the growl where he ended beside the player (t94, t102); later where he walked back
 };
 const specialOrder = ["stomp", "charge"];
 // The setup menu's switches, one a special, both on: one switched off leaves the other alone; with none he only butts.
@@ -303,7 +310,9 @@ class BrutusEncounter {
     this.say(context, "*snorts*");
     this.animate(context, "stomp", [], [{ id: soundIds.snort, position: boss.position }]);
     this.special.tiles = tiles.all;
-    this.laterAfterMove(stomp.landTicks, (ctx) => {
+    // OBS: the stomp lands on the player's tile as its tick starts (a player who stepped back onto its tiles that tick
+    // wasn't hit; one who stepped off them was).
+    this.later(stomp.landTicks, (ctx) => {
       const now = this.boss(ctx.world);
       if (!now?.alive || this.phase !== "fighting") return;
       this.animate(ctx, null, [...tiles.outside.map((tile) => onTile(spotAnims.stompTile, tile)), onActor(spotAnims.stompBoss, now)]);
@@ -311,7 +320,7 @@ class BrutusEncounter {
       if (tiles.all.some((tile) => key(tile) === at)) this.hurt("Brutus's stomp");
     });
   }
-  // The charge, if there's room to dash (WIKI: "the attack is not used if the charge would hit a wall"): false if not.
+  // The charge, as far as 7 tiles till an obstacle stops him, if there's room for 4: false if not.
   startCharge(boss, player, context) {
     const direction = chargeDirection(boss.position, player.position);
     const [dx, dy] = directions[direction];
@@ -323,7 +332,7 @@ class BrutusEncounter {
       path.push(next);
       at = next;
     }
-    if (path.length < charge.tiles) return false;
+    if (path.length < charge.minTiles) return false;
     this.finishSpecial("charge");
     const startedAt = context.tick;
     // His lane: every tile his 3x3 covers from where he stands to where he stops.
@@ -333,7 +342,7 @@ class BrutusEncounter {
     this.nextAt = startedAt + charge.nextTurnTicks;
     this.say(context, "*growls*");
     this.animate(context, "charge", [], [{ id: soundIds.growl, position: boss.position }]);
-    this.laterAfterMove(charge.setOffTicks, (ctx) => {
+    this.later(charge.setOffTicks, (ctx) => {
       if (this.phase !== "fighting") return;
       if (lane.has(key(ctx.world.getPlayer().position))) this.hurt("Brutus's charge");
     });
