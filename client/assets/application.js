@@ -4491,6 +4491,17 @@ var ITEM_WIELD_REQUIREMENTS = {
   29804: {
     hitpoints: 90,
   },
+  // The Fractured Archive's items (WIKI: each item's page; CACHE: params 434 and 436, the skill and level to wield).
+  34681: {ranged: 80}, // Ascension crossbows
+  34684: {ranged: 80}, // Ascension bolts
+  34690: {ranged: 80}, // Diamond ascension bolts
+  34696: {ranged: 80}, // Diamond ascension bolts (e)
+  34702: {ranged: 80}, // Onyx ascension bolts
+  34708: {ranged: 80}, // Onyx ascension bolts (e)
+  34715: {attack: 85}, // Obligator
+  34717: {attack: 85}, // Obligator (uncharged)
+  34719: {defence: 80}, // Rondache
+  34725: {magic: 85}, // Zorya's tome
 };
 function Mle(h2, h3) {
   const h5 = {};

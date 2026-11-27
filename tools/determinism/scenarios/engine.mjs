@@ -908,6 +908,74 @@ export const scenarios = [
     },
   },
   {
+    // The Ascension crossbows (WIKI: Ascension crossbows): 3 ticks, 2 on rapid; only ascension bolts, and the bolt's
+    // effect half as likely. Diamond ascension bolts (e) on accurate, then onyx (e) on rapid, then dragon bolts
+    // (refused: they are not ascension bolts).
+    name: "engine/ascension-crossbows",
+    kind: "yama_p3",
+    seed: 54,
+    ticks: 75,
+    mechanics: dummy,
+    ...rangedGear,
+    equipment: { ...rangedGear.equipment, weapon: 34681 /* Ascension crossbows */ },
+    supplies: { equippedAmmo: { id: 34696 /* Diamond ascension bolts (e) */ } },
+    inventory: [34708 /* Onyx ascension bolts (e) */, 21905 /* Dragon bolts */],
+    script(tick, api) {
+      if (tick === 1) (offensive(api, "Rigour"), api.act({ type: "attackStyleChange", index: 0 }), attack(api, boss(api).id));
+      if (tick === 30) (api.act({ type: "equipAmmoFromInventory", inventoryIndex: 0, itemId: 34708 }), api.act({ type: "attackStyleChange", index: 1 }));
+      if (tick === 31) attack(api, boss(api).id);
+      if (tick === 60) api.act({ type: "equipAmmoFromInventory", inventoryIndex: 1, itemId: 21905 });
+      if (tick === 61) attack(api, boss(api).id);
+    },
+  },
+  {
+    // The Obligator (WIKI: Obligator): the charged Thrust is the highest of 2 or more damage rolls, more damage on a
+    // big target; the Smash attacks every 3 ticks; the uncharged Obligator's Thrust is an ordinary hit.
+    name: "engine/obligator",
+    kind: "yama_p3",
+    seed: 55,
+    ticks: 60 * 3,
+    mechanics: dummy,
+    ...meleeGear,
+    equipment: { ...meleeGear.equipment, weapon: 34715 /* Obligator */, shield: undefined },
+    inventory: [34717 /* Obligator (uncharged) */],
+    script(tick, api) {
+      if (tick === 1) (offensive(api, "Piety"), attack(api, boss(api).id));
+      if (tick === 60) (api.act({ type: "attackStyleChange", index: 2 }), attack(api, boss(api).id));
+      if (tick === 120) (api.act({ type: "attackStyleChange", index: 0 }), equip(api, 0, "weapon"), attack(api, boss(api).id));
+    },
+  },
+  {
+    // Zorya's tome (WIKI: Zorya's tome): its spell, floor(Magic / 3) - 10. Zorya's flow, and the three attacks after
+    // a Flow that hits, with 150% more accuracy and 60% more damage, every 2 ticks; two Flows in a row store five.
+    name: "engine/zoryas-tome",
+    kind: "yama_p3",
+    seed: 56,
+    ticks: 90,
+    mechanics: { ...dummy, infiniteSpecialAttack: true },
+    ...magicGear,
+    equipment: { ...magicGear.equipment, weapon: 34725 /* Zorya's tome */ },
+    script(tick, api) {
+      if (tick === 1) (offensive(api, "Augury"), attack(api, boss(api).id));
+      if (tick === 20 || tick === 50 || tick === 53) special(api);
+    },
+  },
+  {
+    // The Rondache (WIKI: Rondache): 2 less damage from each of Yama's melee hits, and charges from it once the player
+    // has attacked, at most every 2 ticks; Shield Slam at 10 charges or more, x + x% damage against crush.
+    name: "engine/rondache",
+    kind: "yama_p3",
+    seed: 57,
+    ticks: 200,
+    mechanics: { ...dummy, yamaMelee: true, infiniteHealth: true },
+    ...meleeGear,
+    equipment: { ...meleeGear.equipment, weapon: 22324 /* Ghrazi rapier */, shield: 34719 /* Rondache */ },
+    script(tick, api) {
+      if (tick === 1) (offensive(api, "Piety"), attack(api, boss(api).id));
+      if (tick % 20 === 0 && !api.player().isSpecialAttackActive) special(api);
+    },
+  },
+  {
     // An accurate hit that does no damage. In the Glyphic Attenuation contract damage is multiplied by 1 + 0.0155 per
     // point of prayer bonus; the Ruinous powers book has -1, and a hit of 1 (all a player of 1 Strength rolls, half
     // the time) is floored to 0. The warhammer's Defence drain needs damage, so the engine sorts the special's effects

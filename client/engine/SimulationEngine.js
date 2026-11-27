@@ -9,13 +9,15 @@ import {
   getWeaponFormulaStyle,
 } from "./weapons.js";
 import { spotAnimIds } from "../data/spotAnimIds.js";
+import { expireZoryasFlow } from "./zoryasFlow.js";
+import { tickRondache, isWearingRondache, getRondacheCharges } from "./rondache.js";
 import {
   getWeaponCategoryOrUnarmed,
   getDefaultAttackStyleIndex,
   getActiveSpell,
   getWeaponCategoryDefinition,
 } from "../data/weaponCategories.js";
-import { hasSpecialAttack } from "../data/specialAttackDefinitions.js";
+import { getEquippedSpecialAttackItemId } from "../data/specialAttackDefinitions.js";
 import {
   ringOfEnduranceItemId,
   createCombatTimers,
@@ -772,6 +774,8 @@ function buildEngineState(worldState, engine) {
       : {
           soulreaperStacks: player.soulreaper.stacks,
         }),
+    // The Rondache's charges, for the bar under the special attack orb (rondache.js).
+    ...(isWearingRondache(player) ? { rondacheCharges: getRondacheCharges(player) } : {}),
     combatTimers: player.combatTimers,
     inventory: player.inventory,
     groundItems: worldState.groundItems.map((groundItem) => ({
@@ -1855,6 +1859,10 @@ var SimulationEngine = class {
       tickEvents: this.tickEvents,
     });
     player.soulreaper = decaySoulreaperStacks(player.soulreaper, tick);
+    tickRondache(player, tick);
+    if (player.zoryasFlow !== undefined) {
+      player.zoryasFlow = expireZoryasFlow(player.zoryasFlow, tick);
+    }
     const postTickContext = this.buildTickContext(tick, player.position, inputs, npcMovements, setProtectionPrayer);
     for (const postTickDamage of this.encounter.processPostTick(postTickContext, mechanics)) {
       this.applyEnvironmentalDamage(postTickDamage, tick);
@@ -2914,7 +2922,7 @@ var SimulationEngine = class {
               };
               break;
             }
-            if (undefined !== loadout.equipment.weapon && hasSpecialAttack(loadout.equipment.weapon)) {
+            if (getEquippedSpecialAttackItemId(loadout.equipment) !== undefined) {
               specialAttackActive = !specialAttackActive;
             }
             break;
@@ -3204,7 +3212,7 @@ var SimulationEngine = class {
           ) {
             break;
           }
-          if (player.equipment.weapon !== undefined && hasSpecialAttack(player.equipment.weapon)) {
+          if (getEquippedSpecialAttackItemId(player.equipment) !== undefined) {
             player.isSpecialAttackActive = !player.isSpecialAttackActive;
           }
           break;
