@@ -47,7 +47,7 @@ function counter(api) {
 
 // The wiki's two melee setups (loadouts.js), worn.
 const obligator = {
-  equipment: { head: 24419, cape: 21295, amulet: 29801, weapon: 34715, body: 24420, shield: 22322, legs: 24421, hands: 22981, boots: 31097, ring: 28307 },
+  equipment: { head: 24419, cape: 21295, amulet: 29801, weapon: 34715, body: 24420, legs: 24421, hands: 22981, boots: 31097, ring: 28307 },
   supplies: { equippedAmmo: { id: 22947 } },
 };
 const graniteHammer = {

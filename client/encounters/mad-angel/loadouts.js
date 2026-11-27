@@ -1,6 +1,7 @@
 // The Mad Angel's default loadouts (the descriptor's `loadouts`, encounters/registry.js), from the wiki's strategy
 // guide (Mad Angel/Strategies, "Melee" and "Melee (Low level)"): melee is the way, Protect from Melee for her standard
-// attacks and Protect from Magic for her smite. The guide's first weapon is the Obligator; the granite hammer is its
+// attacks and Protect from Magic for her smite. The guide's first weapon is the Obligator, two-handed (WIKI: Obligator),
+// so it is worn without a shield: the guide's shields go with its one-handed weapons. The granite hammer is its
 // golembane weapon (+30% against her, client/engine/playerAttack/formula.js) and the low-level tab's first. Its
 // inventory: a special attack weapon, a divine super combat potion, prayer potions, food and the Book of the Dead.
 // Sharks are not edible in the client: anglerfish, as the other bosses' setups.
@@ -19,9 +20,8 @@ export const madAngelLoadouts = {
       head: 24419, // Inquisitor's great helm
       cape: 21295, // Infernal cape
       amulet: 29801, // Amulet of rancour
-      weapon: 34715, // Obligator
+      weapon: 34715, // Obligator (two-handed: no shield)
       body: 24420, // Inquisitor's hauberk
-      shield: 22322, // Avernic defender
       legs: 24421, // Inquisitor's plateskirt
       hands: 22981, // Ferocious gloves
       boots: 31097, // Avernic treads (max)
