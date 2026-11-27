@@ -28,7 +28,7 @@ import { rollNpcAttack } from "../shared/npcAttack.js";
 import { buildActorVisualTarget } from "../shared/npcHelpers.js";
 import { getNpcPursuitMoves, isArenaFootprintWalkable } from "../shared/npcMovement.js";
 import { emitInfernoNpcAttack, emitInfernoVisual } from "../inferno/events.js";
-import { npcTypeIds, seqIds, spotAnims, mapSquare, bossSize, bossStart, playerStart } from "./ids.js";
+import { npcTypeIds, seqIds, spotAnims, soundIds, mapSquare, bossSize, bossStart, playerStart } from "./ids.js";
 import { madAngelLoadouts } from "./loadouts.js";
 
 export const madAngelKind = "mad_angel";
@@ -162,8 +162,15 @@ class MadAngelEncounter {
   boss(world) {
     return world.getNpc(bossActorId);
   }
-  animate(context, clipId, graphics = [], projectiles = []) {
-    emitInfernoVisual(context.tickEvents, { animations: clipId ? [{ actorId: bossActorId, clipId, delayCycles: 0 }] : [], projectiles, graphics });
+  // A visual event: her clip, the projectiles and graphics, and the sounds of no animation, which her audio layer plays
+  // (audio.js): `madAngelSounds`, each { id, position }.
+  animate(context, clipId, graphics = [], projectiles = [], sounds = []) {
+    emitInfernoVisual(context.tickEvents, {
+      animations: clipId ? [{ actorId: bossActorId, clipId, delayCycles: 0 }] : [],
+      projectiles,
+      graphics,
+      ...(sounds.length ? { madAngelSounds: sounds.map(({ id, position }) => ({ id, position: [...position] })) } : {}),
+    });
   }
   // She stands while she sweeps and smites (OBS), and while she wakes.
   standsStill() {
@@ -370,7 +377,13 @@ class MadAngelEncounter {
         null,
         [onActor(spotAnims.bounce, boss, blast.back.cycles)],
         [{ spotAnimId: spotAnims.ball, sourcePosition: [tile[0] + 0.5, tile[1] + 0.5], target: buildActorVisualTarget(boss), startDelayCycles: 0, endDelayCycles: blast.back.cycles, slope: blast.back.slope, startOffset: 0, startHeight: blast.back.startHeight, endHeight: blast.back.endHeight }],
+        [{ id: soundIds.bounce, position: tile }],
       );
+      // OBS: her hit by it heard from her, with her hitsplat.
+      this.later(blast.bounceHitTicks, (ctx) => {
+        const her = this.boss(ctx.world);
+        if (her?.alive) this.animate(ctx, null, [], [], [{ id: soundIds.bounceHit, position: centreOf(her.position) }]);
+      });
       context.queueNpcHit({ attackerId: bossActorId, targetId: bossActorId, style: "typeless", attackKind: "typeless", rolledDamage: this.randomInt(blast.bounceDamage), accuracySucceeded: true, impactDelayTicks: blast.bounceHitTicks, sourceDeathPolicy: "persist" });
       special.throwsLeft--;
       if (special.throwsLeft > 0) this.later(blast.rethrowTicks, (ctx) => this.releaseBall(ctx));
@@ -378,7 +391,7 @@ class MadAngelEncounter {
       return;
     }
     // OBS: the explosion's graphic on every tile of the nave, the player hit on the same tick; nothing thrown after it.
-    this.animate(context, null, this.arena().map((each) => onTile(spotAnims.explosion, each)));
+    this.animate(context, null, this.arena().map((each) => onTile(spotAnims.explosion, each)), [], [{ id: soundIds.explosion, position: tile }]);
     this.hurt("Exploding light", blast.explosionDamage, "magic", blast.explosionPrayedShare);
     special.endsAt = context.tick + 1;
   }

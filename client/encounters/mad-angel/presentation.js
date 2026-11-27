@@ -1,9 +1,10 @@
 // What draws the Mad Angel: the default scene, with her sequences and the spot
-// animations of her specials. The ids are the game cache's (ids.js); the clip
+// animations of her specials, and her audio layer (audio.js). The ids are the game cache's (ids.js); the clip
 // names are the ones encounter.js plays.
 import { buildScene } from "../shared/buildScene.js";
 import { madAngelKind, madAngelMapSquare, bossActorId } from "./encounter.js";
 import { npcTypeIds, seqIds, spotAnims, bossStart, bossSize } from "./ids.js";
+import { madAngelAudio } from "./audio.js";
 
 const sweepClips = Object.fromEntries(
   Object.entries(seqIds.sweep).flatMap(([side, clips]) => Object.entries(clips).map(([step, seqId]) => [`sweep_${side}_${step}`, seqId])),
@@ -35,6 +36,7 @@ export const presentation = (BaseScene) => ({
   kind: madAngelKind,
   renderConfig,
   sceneBuilder: (context) => buildScene(BaseScene, renderConfig, context),
+  audio: madAngelAudio,
   // The player comes in east of her: the camera looks west, toward her. inferred: to adjust in the browser.
   defaultCamera: { yaw: 1536, pitch: -40, zoom: 420 },
   presentation: {

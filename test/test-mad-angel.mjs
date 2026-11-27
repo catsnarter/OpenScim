@@ -27,6 +27,7 @@ async function ticksOf(name) {
         clips: visuals.flatMap((event) => (event.animations ?? []).filter((a) => a.actorId === BOSS).map((a) => a.clipId)),
         projectiles: visuals.flatMap((event) => (event.projectiles ?? []).map((p) => p.spotAnimId)),
         graphics: visuals.flatMap((event) => (event.graphics ?? []).map((g) => g.spotAnimId)),
+        sounds: visuals.flatMap((event) => event.madAngelSounds ?? []),
         said: events.filter((event) => event.type === "overhead_text").map((event) => event.overheadText),
         hits: events.filter((event) => event.type === "hit_applied" && event.targetId === "player").map((event) => event.damage),
         bossHits: events.filter((event) => event.type === "hit_applied" && event.targetId === BOSS).map((event) => event.damage),
@@ -59,6 +60,7 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   assert.deepEqual(ticksWith(ticks, (tick) => tick.projectiles.includes(4015)).slice(0, 1), [24]);
   assert.ok(ticks[24].tiles.some(([id]) => id === 1448), "the shadow on the ball's tile");
   assert.equal(ticks[29].tiles.filter(([id]) => id === 4016).length, 102);
+  assert.deepEqual(ticks[29].sounds.map((sound) => sound.id), [12054], "the explosion heard (OBS)");
   assert.ok(ticks[29].hits.length === 1 && ticks[29].hits[0] >= 30 && ticks[29].hits[0] <= 35);
   assert.ok(!ticks.slice(25, 40).some((tick) => tick?.projectiles.includes(4015)));
   // OBS: her standard attacks go on through the blast and are not counted: three more after it, then the sweep.
@@ -94,6 +96,11 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   const bounces = ticksWith(ticks, (tick) => tick.graphics.includes(4017)).filter((tick) => tick < 60);
   assert.deepEqual(bounces, [29, 35, 41]);
   for (const tick of bounces) assert.ok(ticks[tick + 2].bossHits.some((damage) => damage >= 18 && damage <= 22), "bounce hit at " + (tick + 2));
+  // OBS: the bounce heard on the ball's tile as it lands (12056), her hit by it from her with her hitsplat (12055).
+  for (const tick of bounces) {
+    assert.deepEqual(ticks[tick].sounds.map((sound) => [sound.id, sound.position.join()]), [[12056, ticks[tick].player.join()]]);
+    assert.deepEqual(ticks[tick + 2].sounds.map((sound) => sound.id), [12055]);
+  }
   assert.ok(!ticks.some((tick) => tick?.tiles.some(([id]) => id === 4016)), "no ball explodes");
   // Out of the half each cleave sweeps (the side opposite the sword, or behind her): never caught, and never on a
   // swept tile.
@@ -181,6 +188,18 @@ const clipTicks = (ticks, clip) => ticksWith(ticks, (tick) => tick.clips.include
   assert.equal(ticks[1].state.phase, "waking");
   assert.equal(ticks[4].state.phase, "fighting");
   assert.equal(ticks[4].state.nextSpecial, "blast");
+}
+
+{
+  // Her audio layer plays what the encounter attaches, on its tile, heard to 20 (OBS); it passes on every other event.
+  const { madAngelAudio } = await import("../client/encounters/mad-angel/audio.js");
+  const rule = madAngelAudio.rules.inferno_visual;
+  assert.deepEqual(rule.preloadIds.sort(), [12054, 12055, 12056]);
+  assert.deepEqual(rule.resolve({ madAngelSounds: [{ id: 12054, position: [36, 37] }] }), {
+    kind: "play",
+    sound: [{ id: 12054, delayCycles: 0, range: 20, position: [36, 37], channel: "area" }],
+  });
+  assert.deepEqual(rule.resolve({ hydraSounds: [{ id: 4106 }] }), { kind: "pass" });
 }
 
 console.log("The Mad Angel wakes, swings every 6 ticks, and runs her blast, sweep and smite in turn as recorded; she enrages at 350.");

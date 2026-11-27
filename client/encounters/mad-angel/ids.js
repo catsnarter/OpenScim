@@ -41,18 +41,16 @@ export const spotAnims = {
   cleave: 2184, // OBS: on each tile a cleave sweeps
 };
 
-// OBS: the sounds that play with her attacks, as area sounds from her.
+// OBS: the sounds of the fight that are in no animation, each heard to 20 tiles: the ball bounced off its tile, her hit
+// by it two ticks on (her hitsplat's tick), and its explosion on its tile. Her others (the wake, the swing, the throw,
+// the sweeps, the smite's crackle and strikes, the death) are in her animations' frames (CACHE), and the scene plays them.
+// CACHE: the pinned cache (OpenRS2 2762) lists 12054 and 12056 but lacks their data (`npm run assets` names them
+// missing): silent until a cache that has them is pinned; 12055 plays.
 export const soundIds = {
-  wake: [12073, 12074, 12075],
-  melee: [12063, 12064, 12066],
-  blastThrow: [12053, 12057, 12059],
-  bounce: [12056, 12055],
+  bounce: 12056,
+  bounceHit: 12055,
   explosion: 12054,
-  sweepDraw: [12082, 12083],
-  cleave: [12080, 12081],
-  smite: [12072, 12067],
-  smiteStrike: [12070, 12071],
-  death: [12061, 12060],
+  range: 20,
 };
 
 export const mapSquare = { x: 39, y: 34 }; // CACHE, WIKI (Mad Angel, Location: 2532, 2215)
