@@ -160,7 +160,11 @@ export function createCombatAchievementsTracker({
       return;
     }
     streak.count++;
-    for (const task of achievements.tasks) if (task.each) streak.tasks[task.id] = task.each(run) ? (streak.tasks[task.id] ?? 0) + 1 : 0;
+    for (const task of achievements.tasks) {
+      if (!task.each) continue;
+      const count = streak.tasks[task.id] ?? 0;
+      streak.tasks[task.id] = task.each(run) ? count + 1 : task.keepOnMiss ? count : 0;
+    }
     const kills = store.recordKill(kind);
     run.progress = { kills, streak: streak.count, taskStreaks: { ...streak.tasks } };
     const done = judgeKill(run, achievements, run.progress, store.completedKeys());

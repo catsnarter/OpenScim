@@ -7,7 +7,7 @@
 // This module imports runs.js only, so a boss's task file can use it without an import cycle.
 import { ticksUnder, killTicks, elapsedTicks, tickSeconds } from "./runs.js";
 
-export { hitsFrom } from "./runs.js";
+export { hitsFrom, hitsExcept } from "./runs.js";
 
 /** A kill-count task: `n` kills that counted, this one included. */
 export const kills = (n) => ({
@@ -42,6 +42,13 @@ export const unless = (happened, reason) => ({ check: (run) => !happened(run), f
  * starts again. The tracker keeps the count (`progress.taskStreaks`), by the kills that met `each`.
  */
 export const inARowUnless = (n, happened, reason) => ({ each: (run) => !happened(run), times: n, failed: (run) => happened(run) && reason });
+
+/**
+ * A task of `n` kills in one visit, each without something happening ("Kill Vardorvis perfectly 5 times without
+ * leaving"): a kill that misses it does not count, and the count goes on (WIKI, its task pages: "you must simply
+ * achieve 5 perfect kills in a single instance, rather than having to do so 5 kills in a row").
+ */
+export const inOneVisitUnless = (n, happened, reason) => ({ ...inARowUnless(n, happened, reason), keepOnMiss: true });
 
 /** "Kill the Alchemical Hydra without taking any damage." */
 export const noDamage = () => unless((run) => run.damageTaken > 0, "You took damage.");

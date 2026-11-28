@@ -27,7 +27,9 @@ export function newRun(kind, startTick) {
     lastTick: startTick,
     assisted: new Set(),
     damageTaken: 0,
-    hits: {}, // source: { count, damage }, the hits on the player its encounter named
+    hits: {}, // source: { count, damage, damaged, unprayed, unprayedDamaged }, the hits on the player its encounter
+    // named: how many, their damage, how many dealt some, how many were of a style the player did not pray against,
+    // and how many of those dealt some
     weapons: new Set(),
     highestHp: 0,
     // The player's attacks (each "attack_started" of the player's): how many, their styles ("melee", "range",
@@ -35,7 +37,11 @@ export function newRun(kind, startTick) {
     attacks: 0,
     attackStyles: new Set(),
     attackWeapons: new Set(),
+    attackAmmo: new Set(), // the ammunition of the attacks that used some
     spells: new Set(),
+    ran: false, // the player ran at some tick
+    tilesMoved: 0, // the tiles the player moved, a tick's step as its longer side
+    position: null,
     prayerLost: false, // the player's prayer points went down at some tick
     prayerPoints: null,
     killTick: null, // the tick the boss died
@@ -59,6 +65,10 @@ export const elapsedTicks = (run) => (run.killTick ?? run.lastTick) - run.startT
 /** How many hits on the player the encounter named `source`. */
 export const hitsFrom = (run, source) => run.hits[source]?.count ?? 0;
 
+/** The hits on the player from any source but `except` (a list), counted by `what` (a field of run.hits). */
+export const hitsExcept = (run, except = [], what = "count") =>
+  Object.entries(run.hits).reduce((sum, [source, seen]) => sum + (except.includes(source) ? 0 : seen[what]), 0);
+
 // The mechanics toggles that make a kill not count.
 const aidToggles = { infiniteHealth: "infinite health", infiniteSpecialAttack: "infinite special attack" };
 
@@ -76,6 +86,7 @@ export function observeTick(run, engine, events, achievements) {
       run.attacks++;
       if (event.style) run.attackStyles.add(event.style);
       run.attackWeapons.add(event.weaponId ?? "none");
+      if (event.ammoId) run.attackAmmo.add(event.ammoId);
       if (event.spellId) run.spells.add(event.spellId);
     }
   }
@@ -84,14 +95,22 @@ export function observeTick(run, engine, events, achievements) {
   for (; run.historyIndex < history.length; run.historyIndex++) {
     const hit = history[run.historyIndex];
     if (hit.targetId !== "player" || !hit.source) continue;
-    const seen = (run.hits[hit.source] ??= { count: 0, damage: 0 });
+    const seen = (run.hits[hit.source] ??= { count: 0, damage: 0, damaged: 0, unprayed: 0, unprayedDamaged: 0 });
     seen.count++;
     seen.damage += hit.effectiveDamage ?? 0;
+    if ((hit.effectiveDamage ?? 0) > 0) seen.damaged++;
+    if (hit.prayedCorrectly === false) seen.unprayed++;
+    if (hit.prayedCorrectly === false && (hit.effectiveDamage ?? 0) > 0) seen.unprayedDamaged++;
   }
 
   const player = engine.player();
   if (player?.equipment?.weapon) run.weapons.add(player.equipment.weapon);
   run.highestHp = Math.max(run.highestHp, player?.vitals?.hp ?? 0);
+  if (player?.isRunning) run.ran = true;
+  if (player?.position) {
+    if (run.position) run.tilesMoved += Math.max(Math.abs(player.position[0] - run.position[0]), Math.abs(player.position[1] - run.position[1]));
+    run.position = [...player.position];
+  }
   const points = player?.prayerState?.points;
   if (points !== undefined) {
     if (run.prayerPoints !== null && points < run.prayerPoints) run.prayerLost = true;
@@ -99,7 +118,7 @@ export function observeTick(run, engine, events, achievements) {
   }
 
   // A boss's own record of the fight: its snapshot's state, this tick's events, and the run so far.
-  if (achievements?.observe) achievements.observe(engine.getEncounterSnapshot?.().state ?? {}, run.facts, { events, run });
+  if (achievements?.observe) achievements.observe(engine.getEncounterSnapshot?.().state ?? {}, run.facts, { events, run, engine });
 
   const phase = engine.getEncounterOutcome?.().phase;
   if (phase === "resolving" || phase === "victory") {
