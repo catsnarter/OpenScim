@@ -1,5 +1,6 @@
 // Combat achievements in the page (client/combatAchievements/setup.js, and the victory screen of assets/application.js):
-// the Practice menu's Setup lists the Alchemical Hydra's tasks to go for, a box each, kept as they are ticked; a
+// the Practice menu's Setup lists the Alchemical Hydra's tasks to go for, folded until opened, a box each, kept as
+// they are ticked; a
 // chosen task's failure is told in the chat; and the victory screen lists how each chosen task went, the failed ones
 // with why and the tick. With infinite health and the boss's hitpoints set, the kill does not count.
 import assert from "node:assert/strict";
@@ -27,9 +28,16 @@ try {
   await page.getByRole("button", { name: /Options/ }).first().click();
   const list = page.locator('[data-testid="combat-achievements-setup"]').first();
   await list.waitFor();
+  // Folded until opened: its header says so, and none of its boxes is showing.
+  assert.equal(await list.evaluate((fold) => fold.open), false);
+  assert.equal(await list.locator("summary").innerText(), "Tasks to go for");
+  assert.equal(await list.locator('input[type="checkbox"]:visible').count(), 0);
+  await list.locator("summary").click();
   assert.equal(await list.locator('input[type="checkbox"]').count(), 12);
   for (const name of ["Alcleanical Hydra", "Alchemical Veteran"]) await page.getByRole("checkbox", { name }).first().check();
   assert.match(await list.innerText(), /2 to go for/);
+  assert.equal(await list.locator("summary").innerText(), "Tasks to go for (2 chosen)");
+  assert.equal(await list.evaluate((fold) => fold.open), true, "still open after a box is ticked");
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("openscim.combatAchievements.v1")).selected.alchemical_hydra), ["alcleanical_hydra", "alchemical_veteran"]);
   await page.keyboard.press("Escape");
 
