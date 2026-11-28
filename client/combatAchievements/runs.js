@@ -132,31 +132,44 @@ export function newlyAssisted(run) {
 }
 
 /**
- * How the tasks chosen to go for (`selectedIds`) stand in `run`, in the boss's order: each
- * { task, status, reason?, tick? }. `status` is "completed" (a clean kill met it), "failed" (with
- * why, and the tick: its own failure, an aid that stopped the kill counting, or the player's death),
- * "not completed" (a kill that did not meet it and nothing failed it: a kill count still short), or
- * "in progress" while the fight runs. `progress` is the kills of the boss ({ kills, streak }).
+ * How the boss's tasks went in `run`, for the victory screen: { chosen, notCounted, rows }.
+ * - `notCounted`: { reasons, tick } when an aid stopped the kill counting (the aids in the order they were seen,
+ *   and the tick of the first), or null.
+ * - `rows`, in the boss's order, each { task, status, reason?, tick? }. With tasks chosen to go for
+ *   (`selectedIds`; `chosen` true), each of them: "completed" (a clean kill met it, on the kill's tick), "failed"
+ *   (its own failure, why and when; the player's death; or the kill not counting), "not completed" (a kill that
+ *   did not meet it, nothing having failed it: a kill count still short), or "in progress" while the fight runs.
+ *   With none chosen, every task the fight completed or failed on its own, and no other.
+ * `progress` is the kills of the boss ({ kills, streak }).
  */
-export function runResults(run, achievements, selectedIds, progress = run?.progress ?? { kills: 0, streak: 0 }) {
-  if (!run || !achievements) return [];
+export function runSummary(run, achievements, selectedIds, progress = run?.progress ?? { kills: 0, streak: 0 }) {
+  if (!run || !achievements) return { chosen: false, notCounted: null, rows: [] };
+  const seen = Object.entries(run.aids).sort((a, b) => a[1] - b[1]);
+  const notCounted =
+    run.assisted.size > 0
+      ? { reasons: [...seen.map(([reason]) => reason), ...[...run.assisted].filter((reason) => !(reason in run.aids))], tick: seen[0]?.[1] ?? run.startTick }
+      : null;
   const selected = new Set(selectedIds);
-  // The aids in the order they were seen, the first giving the tick.
-  const aids = () => Object.entries(run.aids).sort((a, b) => a[1] - b[1]);
-  return achievements.tasks
-    .filter((task) => selected.has(task.id))
-    .map((task) => {
-      const failure = run.failures[task.id];
-      if (failure) return { task, status: "failed", reason: failure.reason, tick: failure.tick };
-      if (run.ended === "death") return { task, status: "failed", reason: "You died.", tick: run.deathTick };
-      if (run.ended !== "kill") return { task, status: "in progress" };
-      if (run.assisted.size > 0) {
-        const seen = aids();
-        const reasons = [...seen.map(([reason]) => reason), ...[...run.assisted].filter((reason) => !(reason in run.aids))];
-        return { task, status: "failed", reason: "The kill did not count: " + reasons.join(", ") + ".", tick: seen[0]?.[1] ?? run.startTick };
-      }
-      if (task.check(run, progress)) return { task, status: "completed", tick: run.killTick };
+  const chosen = achievements.tasks.some((task) => selected.has(task.id));
+  const clean = run.ended === "kill" && !notCounted;
+  const rows = [];
+  for (const task of achievements.tasks) {
+    const failure = run.failures[task.id];
+    if (!chosen) {
+      if (failure) rows.push({ task, status: "failed", reason: failure.reason, tick: failure.tick });
+      else if (clean && task.check(run, progress)) rows.push({ task, status: "completed", tick: run.killTick });
+      continue;
+    }
+    if (!selected.has(task.id)) continue;
+    if (failure) rows.push({ task, status: "failed", reason: failure.reason, tick: failure.tick });
+    else if (run.ended === "death") rows.push({ task, status: "failed", reason: "You died.", tick: run.deathTick });
+    else if (run.ended !== "kill") rows.push({ task, status: "in progress" });
+    else if (notCounted) rows.push({ task, status: "failed", reason: "The kill did not count.", tick: notCounted.tick });
+    else if (task.check(run, progress)) rows.push({ task, status: "completed", tick: run.killTick });
+    else {
       const target = task.target?.(progress);
-      return { task, status: "not completed", reason: target ? target.current + "/" + target.of + " so far." : "Its requirement was not met." };
-    });
+      rows.push({ task, status: "not completed", reason: target ? target.current + "/" + target.of + " so far." : "Its requirement was not met." });
+    }
+  }
+  return { chosen, notCounted, rows };
 }

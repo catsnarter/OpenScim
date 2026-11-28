@@ -31290,14 +31290,39 @@ function CombatAchievementsSetup({ kind: kind }) {
     ],
   });
 }
-// The victory screen's section: each task chosen to go for, completed, failed (why, and on which tick), or not
-// completed (a kill count still short). Nothing chosen, no section.
+// The victory screen's section, for a boss with combat achievements: whether the kill counted, and how its tasks
+// went: the ones chosen to go for, or with none chosen, every one completed or failed. A failed one says why and on
+// which tick.
 const combatAchievementStatusText = { completed: "Completed", failed: "Failed", "not completed": "Not completed", "in progress": "In progress" };
 function CombatAchievementsResults() {
   (0, React.useEffect)(() => ensureCombatAchievementStyle("ca-ui-style", combatAchievementsCss), []);
-  const results = currentCombatAchievementResults();
-  if (!results.length) {
+  const summary = currentCombatAchievementResults();
+  if (!summary) {
     return null;
+  }
+  const { chosen, notCounted, rows } = summary;
+  const lines = [];
+  if (notCounted) {
+    lines.push(
+      (0, jsxRuntime.jsxs)("p", {
+        className: "victory-modal-ca-note victory-modal-ca-note--not-counted",
+        children: [
+          "This kill did not count: " + notCounted.reasons.join(", ") + ". ",
+          (0, jsxRuntime.jsx)("span", {
+            className: "victory-modal-ca-tick",
+            children: "Tick " + notCounted.tick,
+          }),
+        ],
+      }, "not-counted"),
+    );
+  }
+  if (!rows.length) {
+    lines.push(
+      (0, jsxRuntime.jsx)("p", {
+        className: "victory-modal-ca-note",
+        children: "No task completed or failed. Choose tasks to go for under Practice, Setup, Options.",
+      }, "none"),
+    );
   }
   return (0, jsxRuntime.jsxs)("section", {
     className: "victory-modal-record victory-modal-ca",
@@ -31306,35 +31331,37 @@ function CombatAchievementsResults() {
       (0, jsxRuntime.jsx)("h2", {
         id: "victory-modal-ca-heading",
         className: "victory-modal-record-heading",
-        children: "Combat achievements",
+        children: chosen ? "Combat achievements: tasks to go for" : "Combat achievements",
       }),
-      (0, jsxRuntime.jsx)("ul", {
-        className: "victory-modal-ca-list",
-        children: results.map(({ task, status, reason, tick }) =>
-          (0, jsxRuntime.jsxs)("li", {
-            className: "victory-modal-ca-row victory-modal-ca-row--" + status.replace(" ", "-"),
-            children: [
-              (0, jsxRuntime.jsx)("span", {
-                className: "victory-modal-ca-status",
-                children: combatAchievementStatusText[status],
-              }),
-              (0, jsxRuntime.jsx)("span", {
-                className: "victory-modal-ca-name",
-                children: task.name,
-              }),
-              (0, jsxRuntime.jsx)("span", {
-                className: "victory-modal-ca-tick",
-                children: status === "failed" && tick != null ? "Tick " + tick : "",
-              }),
-              reason &&
+      ...lines,
+      rows.length > 0 &&
+        (0, jsxRuntime.jsx)("ul", {
+          className: "victory-modal-ca-list",
+          children: rows.map(({ task, status, reason, tick }) =>
+            (0, jsxRuntime.jsxs)("li", {
+              className: "victory-modal-ca-row victory-modal-ca-row--" + status.replace(" ", "-"),
+              children: [
                 (0, jsxRuntime.jsx)("span", {
-                  className: "victory-modal-ca-reason",
-                  children: reason,
+                  className: "victory-modal-ca-status",
+                  children: combatAchievementStatusText[status],
                 }),
-            ],
-          }, task.id),
-        ),
-      }),
+                (0, jsxRuntime.jsx)("span", {
+                  className: "victory-modal-ca-name",
+                  children: task.name,
+                }),
+                (0, jsxRuntime.jsx)("span", {
+                  className: "victory-modal-ca-tick",
+                  children: status === "failed" && tick != null ? "Tick " + tick : "",
+                }),
+                reason &&
+                  (0, jsxRuntime.jsx)("span", {
+                    className: "victory-modal-ca-reason",
+                    children: reason,
+                  }),
+              ],
+            }, task.id),
+          ),
+        }),
     ],
   });
 }

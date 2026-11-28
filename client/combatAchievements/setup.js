@@ -30,6 +30,8 @@ export const combatAchievementsCss = `
 .victory-modal-ca-name { color: #ffffff; }
 .victory-modal-ca-tick { color: var(--color-text-muted, #9f9f9f); font-size: 12px; white-space: nowrap; }
 .victory-modal-ca-reason { grid-column: 2 / 4; color: var(--color-text-body, #cec0a3); font-size: 12px; }
+.victory-modal-ca-note { margin: 4px 0; font-size: 12px; color: var(--color-text-body, #cec0a3); text-align: left; }
+.victory-modal-ca-note--not-counted { color: #ff3030; }
 `;
 
 /** Does `kind` have combat achievements to choose from? */

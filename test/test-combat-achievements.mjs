@@ -8,7 +8,7 @@ import { runScenario, loadEnvironment } from "../tools/determinism/harness.mjs";
 import { scenarios } from "../tools/determinism/scenarios/alchemical-hydra.mjs";
 
 await loadEnvironment(); // its module hooks resolve the client's web-root imports
-const { createCombatAchievementsTracker, getCombatAchievements, judgeKill, ticksUnder, formatTicks, tierPoints, killTicks, runResults } = await import(
+const { createCombatAchievementsTracker, getCombatAchievements, judgeKill, ticksUnder, formatTicks, tierPoints, killTicks, runSummary } = await import(
   "../client/combatAchievements/tracker.js"
 );
 const { createCombatAchievementsStore } = await import("../client/combatAchievements/store.js");
@@ -104,24 +104,38 @@ async function track(name, storage = memoryStorage()) {
     assert.equal(failedAt[id], undefined, id);
   }
   assert.equal(failedAt.mixing_correctly === undefined, !run.facts.empowered);
-  // The victory screen's list of the tasks chosen to go for (runResults), in the boss's order: a task failed in
-  // the fight, with its reason and tick; one the fight did not fail, failed as the kill did not count, from the
-  // tick the aid was first seen.
+  // The victory screen's summary (runSummary). The kill did not count: said once, from the tick the aid was first
+  // seen. The tasks chosen to go for, in the boss's order: one failed in the fight, with its reason and tick; the
+  // others failed as the kill did not count.
   const hydra = getCombatAchievements("alchemical_hydra");
+  const rowsOf = (summary) => summary.rows.map(({ task, status, reason, tick }) => [task.id, status, reason, tick]);
   const chosen = ["the_flame_skipper", "alcleanical_hydra", "alchemical_veteran"];
-  assert.deepEqual(runResults(run, hydra, chosen).map(({ task, status, reason, tick }) => [task.id, status, reason, tick]), [
-    ["alchemical_veteran", "failed", "The kill did not count: infinite health.", 0],
-    ["alcleanical_hydra", "failed", "The kill did not count: infinite health.", 0],
+  const assisted = runSummary(run, hydra, chosen);
+  assert.deepEqual(assisted.notCounted, { reasons: ["infinite health"], tick: 0 });
+  assert.equal(assisted.chosen, true);
+  assert.deepEqual(rowsOf(assisted), [
+    ["alchemical_veteran", "failed", "The kill did not count.", 0],
+    ["alcleanical_hydra", "failed", "The kill did not count.", 0],
     ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
   ]);
-  // The same fight as a clean kill: completed on the kill's tick, or a kill count still short.
+  // None chosen: every task the fight failed on its own, and none it did not.
+  const all = runSummary(run, hydra, []);
+  assert.equal(all.chosen, false);
+  assert.deepEqual(all.rows.map((row) => row.status), failed.map(() => "failed"));
+  assert.deepEqual(all.rows.map((row) => row.task.id).sort(), failed.map(([id]) => id).sort());
+  // The same fight as a clean kill: completed on the kill's tick, or a kill count still short; with none chosen,
+  // what it completed and what failed.
   const cleanRun = { ...run, assisted: new Set(), aids: {} };
-  assert.deepEqual(runResults(cleanRun, hydra, chosen, { kills: 1, streak: 1 }).map(({ task, status, reason, tick }) => [task.id, status, reason, tick]), [
+  const cleanSummary = runSummary(cleanRun, hydra, chosen, { kills: 1, streak: 1 });
+  assert.equal(cleanSummary.notCounted, null);
+  assert.deepEqual(rowsOf(cleanSummary), [
     ["alchemical_veteran", "not completed", "1/75 so far.", undefined],
     ["alcleanical_hydra", "completed", undefined, run.killTick],
     ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
   ]);
-  assert.deepEqual(runResults(run, hydra, []), [], "nothing chosen, nothing listed");
+  const cleanAll = runSummary(cleanRun, hydra, [], { kills: 1, streak: 1 });
+  assert.ok(cleanAll.rows.some((row) => row.task.id === "alcleanical_hydra" && row.status === "completed"));
+  assert.ok(!cleanAll.rows.some((row) => row.task.id === "alchemical_veteran"), "a kill count not reached is neither");
 }
 
 {

@@ -59,11 +59,34 @@ try {
       reason: item.querySelector(".victory-modal-ca-reason")?.textContent ?? "",
     })),
   );
-  assert.deepEqual(rows.map((row) => [row.status, row.name]), [["Failed", "Alchemical Veteran"], ["Failed", "Alcleanical Hydra"]]);
-  assert.equal(rows[1].reason, "You took damage.");
-  // The two aids, in the order the tracker saw them: which comes first depends on the ticks between them.
-  assert.match(rows[0].reason, /^The kill did not count: (infinite health, boss hitpoints set|boss hitpoints set, infinite health)\.$/);
+  assert.match(await section.locator("h2").textContent(), /^Combat achievements: tasks to go for$/);
+  // The kill did not count, said once: the two aids, in the order the tracker saw them (which comes first depends
+  // on the ticks between them), and the tick.
+  assert.match(await section.locator(".victory-modal-ca-note--not-counted").innerText(), /^This kill did not count: (infinite health, boss hitpoints set|boss hitpoints set, infinite health)\. Tick \d+$/);
+  assert.deepEqual(rows.map((row) => [row.status, row.name, row.reason]), [
+    ["Failed", "Alchemical Veteran", "The kill did not count."],
+    ["Failed", "Alcleanical Hydra", "You took damage."],
+  ]);
   assert.ok(rows.every((row) => /^Tick \d+$/.test(row.tick)), JSON.stringify(rows));
+
+  // With nothing chosen: every task the fight failed, each with its reason and tick.
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem("openscim.combatAchievements.v1"));
+    localStorage.setItem("openscim.combatAchievements.v1", JSON.stringify({ ...saved, selected: {} }));
+  });
+  await page.reload();
+  await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 180000 });
+  await page.evaluate(() => {
+    engine.setMechanicsConfig({ ...engine.getMechanicsConfig(), infiniteHealth: true });
+    engine.injectAction({ type: "attackTarget", targetId: "alchemical-hydra" });
+  });
+  await page.waitForFunction(() => engine.currentTick > 20, null, { timeout: 60000 });
+  await page.evaluate(() => engine.setBossHp(0));
+  await section.waitFor({ timeout: 60000 });
+  assert.match(await section.locator("h2").textContent(), /^Combat achievements$/);
+  const all = await section.locator(".victory-modal-ca-row").evaluateAll((items) => items.map((item) => [item.querySelector(".victory-modal-ca-status").textContent, item.querySelector(".victory-modal-ca-name").textContent, item.querySelector(".victory-modal-ca-tick").textContent]));
+  assert.ok(all.length > 0 && all.every(([status, , tick]) => status === "Failed" && /^Tick \d+$/.test(tick)), JSON.stringify(all));
+  assert.ok(all.some(([, name]) => name === "No Pressure"), "the twisted bow fails No Pressure on the first tick");
   assert.deepEqual(errors, []);
   console.log("Combat achievements in the page: the setup's list, the chat's failure, the victory screen's results");
 } finally {

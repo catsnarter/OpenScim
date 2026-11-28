@@ -6,7 +6,7 @@
 // assets/application.js hands it the engine and each tick the game loop
 // publishes; replays publish none, so a replay never counts.
 import { createCombatAchievementsStore } from "./store.js";
-import { createCombatAchievementsTracker, getCombatAchievements, runResults, tierPoints, tierOrder } from "./tracker.js";
+import { createCombatAchievementsTracker, getCombatAchievements, runSummary, tierPoints, tierOrder } from "./tracker.js";
 import { clearChat, tellCompleted, tellFailed, tellAssisted } from "./chat.js";
 
 export const combatAchievementsStore = createCombatAchievementsStore(globalThis.localStorage);
@@ -45,11 +45,12 @@ export const getCombatAchievementsEngine = () => getEngine();
 export const currentRun = () => tracker.currentRun();
 export { getCombatAchievements, tierOrder, tierPoints };
 
-/** How the tasks chosen to go for stand in the current fight (runs.js, runResults), for the victory screen. */
+/** How the boss's tasks went in the current fight (runs.js, runSummary), for the victory screen; null for a boss without them. */
 export function currentResults() {
   const run = tracker.currentRun();
-  if (!run) return [];
-  return runResults(run, getCombatAchievements(run.kind), combatAchievementsStore.selectedFor(run.kind));
+  const achievements = run && getCombatAchievements(run.kind);
+  if (!achievements) return null;
+  return runSummary(run, achievements, combatAchievementsStore.selectedFor(run.kind));
 }
 export const currentStreak = () => tracker.streak();
 
