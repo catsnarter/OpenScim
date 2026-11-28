@@ -2,8 +2,8 @@
 // version of Brutus, in the same field: the Brutus picker's "Version".
 //
 // He butts the player every 5 ticks: crush, up to 4, through Protect from
-// Melee. After three butts (two if the player has dealt 100 at the fight's
-// start) he fades and uses a special, then three butts more, and so on:
+// Melee. After two or three butts (two if the player has dealt 100 at the
+// fight's start) he fades and uses a special, then two or three more, and so on:
 // - charge: he reappears on a side of the player and dashes across him; three
 //   ghosts do the same from the other sides, a tick apart, clockwise.
 // - slam: he reappears at a corner of the player and stomps the corner tile,
@@ -47,7 +47,9 @@ export const bossActorId = "brutus";
 
 const attackSpeed = 5; // WIKI, OBS
 const meleeMaxHit = 4; // WIKI: "max hit of 4", "can hit through Protect from Melee"; OBS up to 3, praying melee
-const standardsBeforeSpecial = 3; // WIKI: "After three basic attacks"; OBS: three, 5 ticks apart, then the special 5 on
+// WIKI (Strategies): "Every two to three attacks" (the article: "After three basic attacks"); OBS: 5 ticks apart, then
+// the special 5 on; three before 7 of 10 specials, two before 3, nothing seen to tell which: at random.
+const standardsBeforeSpecial = [2, 3];
 const earlyDamage = 100; // WIKI: "more than ~100 damage at the start of the fight": then after two
 const bullDamage = [45, 56]; // WIKI: "45-56 damage"; OBS none (every bull dodged)
 const orbDamage = [18, 20]; // WIKI: "18-20"; OBS 19 and 20
@@ -200,6 +202,7 @@ class DemonicBrutusEncounter {
     this.phase = 1; // 1 | 2 | "dead"
     this.nextAt = 1;
     this.standards = 0;
+    this.standardsNeeded = null; // butts before the next special, drawn as the first of them is due
     this.specialsDone = 0;
     this.rotation = null; // { list, next }, chosen as the first special is due
     this.special = null;
@@ -339,7 +342,8 @@ class DemonicBrutusEncounter {
     }
     if (context.tick < this.nextAt || !player.alive) return none;
     const early = this.specialsDone === 0 && this.phase === 1 && boss.vitals.maxHp - boss.vitals.hp > earlyDamage;
-    if (this.standards >= (early ? standardsBeforeSpecial - 1 : standardsBeforeSpecial) && this.startSpecial(boss, player, context)) return none;
+    this.standardsNeeded ??= this.randomInt(standardsBeforeSpecial);
+    if (this.standards >= (early ? standardsBeforeSpecial[0] : this.standardsNeeded) && this.startSpecial(boss, player, context)) return none;
     if (!this.inMeleeReach(boss, player)) return none;
     this.nextAt = context.tick + attackSpeed;
     this.standards++;
@@ -376,13 +380,15 @@ class DemonicBrutusEncounter {
   startSpecial(boss, player, context) {
     const start = this.nextStart();
     if (!start) return false;
-    this.standards = 0;
     this.specialsDone++;
+    const afterStandards = this.standards;
+    this.standards = 0;
+    this.standardsNeeded = null;
     const lead = boss.vitals.hp > fastBelowHp ? leadTicks.slow : leadTicks.fast;
     const clockwise = boss.vitals.hp > counterclockwiseBelowHp;
     const fadedAt = context.tick;
     const lastBull = fadedAt + lead + 3;
-    this.special = { name: start.kind, from: start.from, fadedAt, firstBullAt: fadedAt + lead, endsAt: lastBull + 1, clockwise, bulls: [], orbs: [] };
+    this.special = { name: start.kind, from: start.from, afterStandards, fadedAt, firstBullAt: fadedAt + lead, endsAt: lastBull + 1, clockwise, bulls: [], orbs: [] };
     this.nextAt = lastBull + nextButtAfterLastBull;
     boss.untargetable = true;
     this.animate(context, bossActorId, "fadeOut");
@@ -567,6 +573,7 @@ class DemonicBrutusEncounter {
       boss.vitals = { ...boss.vitals, hp: healAtPhaseTwo };
       this.phase = 2;
       this.standards = 0;
+      this.standardsNeeded = null;
       this.nextAt = defeat.tick + phaseTwoFirstButt;
       this.say(context, "moo moo!");
       context.tickEvents.emit({ type: "hitsplat_spawned", targetId: boss.id, amount: healAtPhaseTwo, hitsplatType: "heal" });
@@ -595,6 +602,7 @@ class DemonicBrutusEncounter {
         special: special && {
           name: special.name,
           from: special.from,
+          afterStandards: special.afterStandards,
           fadedAt: special.fadedAt,
           firstBullAt: special.firstBullAt,
           endsAt: special.endsAt,

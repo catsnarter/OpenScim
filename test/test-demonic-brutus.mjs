@@ -86,19 +86,23 @@ const specials = (ticks) =>
 }
 
 {
-  // Standing still: three butts 5 ticks apart, through prayer and up to 4; then a special; then three more; the
-  // specials in turn, charge and slam.
+  // Standing still: two or three butts 5 ticks apart, through prayer and up to 4; then a special; then two or three
+  // more; the specials in turn, charge and slam.
   const ticks = await ticksOf("standing");
   const butts = when(ticks, (tick) => tick.butts.length);
   assert.ok(butts.flatMap((n) => ticks[n].butts).every((damage) => damage <= 4), "his butts up to 4 (WIKI)");
   const list = specials(ticks);
   assert.ok(list.length >= 4, `${list.length} specials`);
   for (let n = 1; n < list.length; n++) assert.notEqual(list[n].name, list[n - 1].name, "charge and slam in turn");
-  // Three butts before each special, the special 5 ticks after the third (OBS).
+  assert.deepEqual([...new Set(list.map((special) => special.afterStandards))].sort(), [2, 3], "after two and after three");
+  // Two or three butts before each special (WIKI, OBS), the special 5 ticks after the last (OBS).
   for (const special of list) {
-    const before = butts.filter((tick) => tick < special.fadedAt).slice(-3);
-    assert.equal(before.length, 3);
-    assert.deepEqual(gaps([...before, special.fadedAt]), [5, 5, 5], `butts ${before} before the fade at ${special.fadedAt}`);
+    assert.ok([2, 3].includes(special.afterStandards), `${special.afterStandards} butts before the fade at ${special.fadedAt}`);
+    const before = butts.filter((tick) => tick < special.fadedAt).slice(-special.afterStandards);
+    assert.equal(before.length, special.afterStandards);
+    assert.deepEqual(gaps([...before, special.fadedAt]), Array(special.afterStandards).fill(5), `butts ${before} before the fade at ${special.fadedAt}`);
+    // A special the run ends in is checked no further.
+    if (special.firstBullAt + 6 >= ticks.length) continue;
     // Above 500 hitpoints, his first bull 5 ticks after he fades (OBS), and the four a tick apart, each 45 to 56 through prayer.
     assert.equal(special.firstBullAt, special.fadedAt + 5);
     const bulls = when(ticks, (tick) => tick.bulls.length).filter((tick) => tick >= special.firstBullAt && tick < special.firstBullAt + 4);
@@ -187,4 +191,4 @@ const specials = (ticks) =>
   assert.ok(when(ticks, (tick) => tick.texts.includes("m-moo...")).length === 1);
   assert.equal(ticks.at(-1).outcome, "victory");
 }
-console.log("Demonic Brutus: three butts and a special, four bulls a tick apart; faster from 500, counterclockwise from 250; 487 back at 0, then orbs to pray against.");
+console.log("Demonic Brutus: two or three butts and a special, four bulls a tick apart; faster from 500, counterclockwise from 250; 487 back at 0, then orbs to pray against.");

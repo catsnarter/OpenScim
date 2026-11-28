@@ -74,8 +74,8 @@ const bare = { equipment: {} };
 
 export const scenarios = [
   {
-    // A player who stands still and doesn't fight back: three butts, a special, three butts, the next special, each
-    // special's four bulls landing on him. Infinite health: to the end.
+    // A player who stands still and doesn't fight back: two or three butts, a special, two or three butts, the next
+    // special, each special's four bulls landing on him. Infinite health: to the end.
     name: "brutus_demonic/standing",
     kind: KIND,
     seed: 3,
