@@ -372,3 +372,71 @@ async function trackScenario(script, storage = memoryStorage()) {
   for (let n = 0; n < 5; n++) fightOnce(false);
   assert.ok(store.completedKeys().has("vorkath:dodging_the_dragon"), "five in a row");
 }
+
+{
+  // The other bosses' own judges, on made-up fights: what each counts as avoidable, and what it forgives.
+  const { newRun } = await import("../client/combatAchievements/runs.js");
+  const task = (kind, name) => getCombatAchievements(kind).tasks.find((t) => t.name === name);
+  const hit = (count, extra = {}) => ({ count, damage: 0, damaged: 0, unprayed: 0, unprayedDamaged: 0, ...extra });
+  const fight = (hits = {}, more = {}) => Object.assign(newRun("x", 0), { ended: "kill", killTick: 50, lastTick: 50, hits }, more);
+  const fails = (kind, name, run) => Boolean(task(kind, name).failed(run));
+
+  // Duke: the icicles' chip is forgiven; his magic fails it even for a 0 on the prayer.
+  assert.equal(fails("duke_sucellus", "Cold Feet", fight({ "Duke Sucellus' icicles": hit(3, { damaged: 3 }) })), false);
+  assert.equal(fails("duke_sucellus", "Cold Feet", fight({ "Duke Sucellus": hit(1) })), true);
+  assert.equal(fails("duke_sucellus", "Cold Feet", fight({}, { ran: true })), true);
+  const duke = getCombatAchievements("duke_sucellus").judges ?? null;
+  assert.equal(duke, null, "the judges are folded into the tasks");
+  const { dukeSucellusCombatAchievements } = await import("../client/encounters/duke-sucellus/combatAchievements.js");
+  const offBeat = (his) => {
+    const facts = {};
+    dukeSucellusCombatAchievements.observe({}, facts, { events: [{ type: "attack_started", sourceId: "player", targetId: "duke-sucellus" }, ...(his ? [{ type: "zuk_attack", sourceId: "duke-sucellus" }] : [])] });
+    return facts.offBeat;
+  };
+  assert.equal(offBeat(true), undefined, "on his tick");
+  assert.equal(offBeat(false), true, "off his tick");
+
+  // The Leviathan: its roar is forgiven; two stuns fail Serpentine Solo; mithril only, and 25 hitpoints at most.
+  assert.equal(fails("leviathan", "Perfect Leviathan", fight({ "The Leviathan's roar": hit(2, { damaged: 2 }) })), false);
+  assert.equal(fails("leviathan", "Perfect Leviathan", fight({ "The Leviathan": hit(1, { damaged: 1 }) })), true);
+  const { leviathanCombatAchievements } = await import("../client/encounters/leviathan/combatAchievements.js");
+  const leviathanFacts = (states, ammoId) => {
+    const facts = {};
+    for (const state of states) leviathanCombatAchievements.observe(state, facts, { events: [{ type: "attack_started", sourceId: "player", targetId: "leviathan", ammoId }] });
+    return facts;
+  };
+  assert.equal(leviathanFacts([{ stunnedUntil: null }, { stunnedUntil: 30 }, { stunnedUntil: 30 }, { stunnedUntil: null }]).stuns, 1);
+  assert.equal(leviathanFacts([{ stunnedUntil: 30 }, { stunnedUntil: null }, { stunnedUntil: 90 }]).stuns, 2);
+  assert.equal(leviathanFacts([{}], 888).notMithril, undefined, "mithril arrows (888)");
+  assert.equal(leviathanFacts([{}], 892).notMithril, true, "rune arrows (892)");
+  assert.equal(task("leviathan", "Unconventional").check(fight({}, { attacks: 3, highestHp: 25 })), true);
+  assert.equal(task("leviathan", "Unconventional").check(fight({}, { attacks: 3, highestHp: 26 })), false);
+
+  // Vardorvis: his melee on the prayer, even for damage, is forgiven; off it, or a special's damage, is not.
+  assert.equal(fails("vardorvis", "Perfect Vardorvis", fight({ Vardorvis: hit(4, { damaged: 2 }) })), false);
+  assert.equal(fails("vardorvis", "Perfect Vardorvis", fight({ Vardorvis: hit(1, { damaged: 1, unprayed: 1, unprayedDamaged: 1 }) })), true);
+  assert.equal(fails("vardorvis", "Perfect Vardorvis", fight({ "Vardorvis' axe": hit(1, { damaged: 1 }) })), true);
+
+  // Araxxor: his 0 off the prayer is forgiven, an araxyte's is not; a pool's hit is not.
+  assert.equal(fails("araxxor", "Perfect Araxxor", fight({ Araxxor: hit(1, { unprayed: 1 }) })), false);
+  assert.equal(fails("araxxor", "Perfect Araxxor", fight({ "Acidic Araxyte": hit(1, { unprayed: 1 }) })), true);
+  assert.equal(fails("araxxor", "Perfect Araxxor", fight({ "Acid pool": hit(1) })), true);
+  assert.equal(fails("araxxor", "Perfect Araxxor 2", fight({}, { facts: { hitEnraged: true } })), true);
+
+  // The others.
+  assert.equal(fails("phosanis_nightmare", "Dreamland Express", fight({ Sleepwalker: hit(1) })), true);
+  assert.equal(fails("maggot_king", "Digging in", fight({}, { tilesMoved: 40 })), false);
+  assert.equal(fails("maggot_king", "Digging in", fight({}, { tilesMoved: 41 })), true);
+  assert.equal(task("doom_of_mokhaiotl", "Doom Adept").check(fight({}, { facts: { delve: 3 } })), true);
+  assert.equal(task("doom_of_mokhaiotl", "Doom Veteran").check(fight({}, { facts: { delve: 7 } })), false);
+  assert.equal(task("doom_of_mokhaiotl", "Doom Crawler").check(fight({}, { facts: { delve: 1 }, killTick: 49 })), true);
+  assert.equal(task("doom_of_mokhaiotl", "Doom Crawler").check(fight({}, { facts: { delve: 1 }, killTick: 50 })), false, "50 ticks are 30 seconds");
+  assert.equal(task("doom_of_mokhaiotl", "Mokhaiotl Drift").check(fight({}, { facts: { delve: 8, burrowEnded: true } })), false);
+  assert.equal(fails("corrupted_hunllef", "3, 2, 1 - Mage", fight({ "Corrupted Hunllef's tornado": hit(1, { damaged: 1 }) })), false);
+  assert.equal(fails("corrupted_hunllef", "3, 2, 1 - Mage", fight({ "Corrupted Hunllef": hit(1, { damaged: 1, unprayed: 1, unprayedDamaged: 1 }) })), true);
+  assert.equal(task("corrupted_hunllef", "Corrupted Gauntlet Veteran").target({ kills: 2 }).of, 5);
+
+  // Five perfect kills in one visit: a kill that is not perfect does not start the count again.
+  const perfect = task("vardorvis", "Perfect Vardorvis");
+  assert.equal(perfect.keepOnMiss, true);
+}
