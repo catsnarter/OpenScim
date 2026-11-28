@@ -36,6 +36,13 @@ const within = (ticks, monster) => ({
 /** A task that holds unless something happens: met while it has not, failed once it has. */
 export const unless = (happened, reason) => ({ check: (run) => !happened(run), failed: (run) => happened(run) && reason });
 
+/**
+ * A task of `n` kills in a row, each without something happening ("Kill Vorkath 5 times without taking any damage
+ * from his special attacks and without leaving his area"): failed in a fight once it has happened, and its count
+ * starts again. The tracker keeps the count (`progress.taskStreaks`), by the kills that met `each`.
+ */
+export const inARowUnless = (n, happened, reason) => ({ each: (run) => !happened(run), times: n, failed: (run) => happened(run) && reason });
+
 /** "Kill the Alchemical Hydra without taking any damage." */
 export const noDamage = () => unless((run) => run.damageTaken > 0, "You took damage.");
 

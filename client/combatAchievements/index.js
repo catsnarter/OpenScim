@@ -53,6 +53,7 @@ export function currentResults() {
   return runSummary(run, achievements, combatAchievementsStore.selectedFor(run.kind));
 }
 export const currentStreak = () => tracker.streak();
+export const currentTaskStreaks = () => tracker.taskStreaks();
 
 /** After each tick of the live fight, with that tick's events. */
 export function observeCombatAchievements(events) {

@@ -3,7 +3,7 @@
 // that counted, and whether the fight now running can count. Plain DOM, kept
 // in step with the store and the tracker's run. Its chat settings are in
 // Settings, Interface, Game chat (assets/application.js).
-import { combatAchievementsStore, subscribeToRun, getCombatAchievementsEngine, currentRun, currentStreak, ensureStyle, tierLabel } from "./index.js";
+import { combatAchievementsStore, subscribeToRun, getCombatAchievementsEngine, currentRun, currentStreak, currentTaskStreaks, ensureStyle, tierLabel } from "./index.js";
 import { getCombatAchievements, taskKey, tierPoints, tierOrder } from "./tracker.js";
 
 const css = `
@@ -78,7 +78,7 @@ export function mountCombatAchievementsPanel(root) {
     panel.append(summary, killLine, streakLine, runNode);
     runText = "";
     updateRun();
-    const progress = { kills: kills[progressKind] ?? 0, streak: currentStreak() };
+    const progress = { kills: kills[progressKind] ?? 0, streak: currentStreak(), taskStreaks: currentTaskStreaks() };
     for (const tier of tierOrder) {
       const ofTier = tasks.filter((task) => task.tier === tier);
       if (!ofTier.length) continue;

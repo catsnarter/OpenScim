@@ -59,7 +59,13 @@ export function getCombatAchievements(kind) {
     .filter((task) => task.monster === boss.monster)
     .map((task) => {
       const judge = judges[task.name] ?? (boss.shared === false ? null : sharedJudge(task, boss));
-      return { ...task, id: taskId(task.name), ...judge, tracked: Boolean(judge?.check) };
+      const id = taskId(task.name);
+      // A task of kills in a row each meeting something (judges.js, inARowUnless): the tracker's count of them.
+      const streak = judge?.each && {
+        check: (run, progress) => (progress.taskStreaks?.[id] ?? 0) >= judge.times,
+        target: (progress) => ({ current: Math.min(progress.taskStreaks?.[id] ?? 0, judge.times), of: judge.times }),
+      };
+      return { ...task, id, ...judge, ...streak, tracked: Boolean(judge?.check || streak) };
     })
     // By tier, as the wiki's lists of a boss's tasks are, and the game's order within one.
     .sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier) || a.gameId - b.gameId);
@@ -89,7 +95,7 @@ export function createCombatAchievementsTracker({
 }) {
   let run = null;
   let engineSeen = null;
-  let streak = { kind: null, count: 0 }; // clean kills in a row of one boss, without leaving it
+  let streak = { kind: null, count: 0, tasks: {} }; // clean kills in a row of one boss, without leaving it; and of each task's (inARowUnless)
   const wrapped = new WeakSet();
 
   function tellAids() {
@@ -128,7 +134,7 @@ export function createCombatAchievementsTracker({
     const tick = engine.getState().currentTick;
     watch(engine);
     if (!run || engine !== engineSeen || variant !== run.variant || tick <= run.lastTick) {
-      if (variant !== streak.kind) streak = { kind: variant, count: 0 };
+      if (variant !== streak.kind) streak = { kind: variant, count: 0, tasks: {} };
       engineSeen = engine;
       run = newRun(kind, Math.max(0, tick - 1)); // the tick before the first seen: the fight's start
       run.variant = variant;
@@ -149,13 +155,14 @@ export function createCombatAchievementsTracker({
     const failures = newlyFailed(run, achievements, store.completedKeys());
     if (failures.length) onFail(kind, failures, tick);
     if (!run.ended || run.ended === "death" || run.assisted.size > 0) {
-      if (run.ended === "death") streak.count = 0;
+      if (run.ended === "death") streak = { ...streak, count: 0, tasks: {} };
       onRunChange(run);
       return;
     }
     streak.count++;
+    for (const task of achievements.tasks) if (task.each) streak.tasks[task.id] = task.each(run) ? (streak.tasks[task.id] ?? 0) + 1 : 0;
     const kills = store.recordKill(kind);
-    run.progress = { kills, streak: streak.count };
+    run.progress = { kills, streak: streak.count, taskStreaks: { ...streak.tasks } };
     const done = judgeKill(run, achievements, run.progress, store.completedKeys());
     if (done.length) {
       store.complete(done.map((task) => taskKey(kind, task)));
@@ -164,5 +171,5 @@ export function createCombatAchievementsTracker({
     onRunChange(run);
   }
 
-  return { observe, noteAid, currentRun: () => run, streak: () => streak.count };
+  return { observe, noteAid, currentRun: () => run, streak: () => streak.count, taskStreaks: () => ({ ...streak.tasks }) };
 }

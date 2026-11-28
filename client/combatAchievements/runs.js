@@ -30,6 +30,14 @@ export function newRun(kind, startTick) {
     hits: {}, // source: { count, damage }, the hits on the player its encounter named
     weapons: new Set(),
     highestHp: 0,
+    // The player's attacks (each "attack_started" of the player's): how many, their styles ("melee", "range",
+    // "magic"), the weapons they were made with ("none" for fists) and the spells cast.
+    attacks: 0,
+    attackStyles: new Set(),
+    attackWeapons: new Set(),
+    spells: new Set(),
+    prayerLost: false, // the player's prayer points went down at some tick
+    prayerPoints: null,
     killTick: null, // the tick the boss died
     deathTick: null, // the tick the player died
     ended: null, // "kill" | "death"
@@ -64,6 +72,12 @@ export function observeTick(run, engine, events, achievements) {
 
   for (const event of events) {
     if (event.type === "hit_applied" && event.targetId === "player" && event.damage > 0) run.damageTaken += event.damage;
+    if (event.type === "attack_started" && event.sourceId === "player") {
+      run.attacks++;
+      if (event.style) run.attackStyles.add(event.style);
+      run.attackWeapons.add(event.weaponId ?? "none");
+      if (event.spellId) run.spells.add(event.spellId);
+    }
   }
   const history = engine.damageHistory ?? [];
   if (run.historyIndex > history.length) run.historyIndex = 0;
@@ -78,8 +92,14 @@ export function observeTick(run, engine, events, achievements) {
   const player = engine.player();
   if (player?.equipment?.weapon) run.weapons.add(player.equipment.weapon);
   run.highestHp = Math.max(run.highestHp, player?.vitals?.hp ?? 0);
+  const points = player?.prayerState?.points;
+  if (points !== undefined) {
+    if (run.prayerPoints !== null && points < run.prayerPoints) run.prayerLost = true;
+    run.prayerPoints = points;
+  }
 
-  if (achievements?.observe) achievements.observe(engine.getEncounterSnapshot?.().state ?? {}, run.facts);
+  // A boss's own record of the fight: its snapshot's state, this tick's events, and the run so far.
+  if (achievements?.observe) achievements.observe(engine.getEncounterSnapshot?.().state ?? {}, run.facts, { events, run });
 
   const phase = engine.getEncounterOutcome?.().phase;
   if (phase === "resolving" || phase === "victory") {
