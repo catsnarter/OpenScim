@@ -27,7 +27,7 @@
 // nothing in the engine but the three methods it wraps to see an aid used,
 // so a fight runs and digests the same with it as without.
 import { encounterRegistry } from "../encounters/registry.js";
-import { newRun, observeTick, judgeKill, taskKey, newlyFailed, newlyAssisted } from "./runs.js";
+import { newRun, observeTick, judgeKill, taskKey, newlyFailed, newlyAssisted, noteAid as noteRunAid } from "./runs.js";
 
 export * from "./runs.js";
 
@@ -69,7 +69,7 @@ export function createCombatAchievementsTracker({
 
   const noteAid = (reason) => {
     if (run && !run.ended) {
-      run.assisted.add(reason);
+      noteRunAid(run, reason);
       if (getCombatAchievements(run.kind)) tellAids();
       onRunChange(run);
     }
@@ -100,7 +100,7 @@ export function createCombatAchievementsTracker({
       engineSeen = engine;
       run = newRun(kind, Math.max(0, tick - 1)); // the tick before the first seen: the fight's start
       // A fight taken over part-way (a replay's Take over) does not count.
-      if (tick > 1) run.assisted.add("started part-way");
+      if (tick > 1) noteRunAid(run, "started part-way");
       onRunStart(run);
     }
     if (!achievements) {
@@ -123,7 +123,8 @@ export function createCombatAchievementsTracker({
     }
     streak.count++;
     const kills = store.recordKill(kind);
-    const done = judgeKill(run, achievements, { kills, streak: streak.count }, store.completedKeys());
+    run.progress = { kills, streak: streak.count };
+    const done = judgeKill(run, achievements, run.progress, store.completedKeys());
     if (done.length) {
       store.complete(done.map((task) => taskKey(kind, task)));
       onComplete(kind, done, tick);

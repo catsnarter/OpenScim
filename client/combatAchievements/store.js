@@ -1,5 +1,6 @@
 // The player's combat achievements, kept in this browser (localStorage): the
-// tasks completed, when, the clean kills of each boss, and the settings. There are no
+// tasks completed, when, the clean kills of each boss, the tasks chosen to go
+// for at each (the setup's list: `selected`, task ids by kind), and the settings. There are no
 // accounts, so another browser starts from nothing. Storage that is missing
 // or refuses (a private window, blocked site data) leaves the progress in
 // memory for the visit.
@@ -11,12 +12,13 @@ const storageKey = "openscim.combatAchievements.v1";
 // wiki gives no defaults; the first is on, as it was asked for, the second off.
 export const defaultSettings = { failureMessages: true, repeatFailureMessages: false };
 
-const empty = () => ({ completed: {}, kills: {}, settings: { ...defaultSettings } });
+const empty = () => ({ completed: {}, kills: {}, selected: {}, settings: { ...defaultSettings } });
 
 function read(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(storageKey) ?? "null");
-    if (parsed && typeof parsed === "object") return { completed: { ...parsed.completed }, kills: { ...parsed.kills }, settings: { ...defaultSettings, ...parsed.settings } };
+    if (parsed && typeof parsed === "object")
+      return { completed: { ...parsed.completed }, kills: { ...parsed.kills }, selected: { ...parsed.selected }, settings: { ...defaultSettings, ...parsed.settings } };
   } catch {
     // unreadable: start again
   }
@@ -53,19 +55,27 @@ export function createCombatAchievementsStore(storage = globalThis.localStorage)
       state = { ...state, completed: { ...state.completed, ...Object.fromEntries(keys.map((key) => [key, at])) } };
       save();
     },
+    /** The ids of the tasks chosen to go for at `kind`. */
+    selectedFor: (kind) => state.selected[kind] ?? [],
+    /** Chooses the tasks to go for at `kind` (their ids). */
+    setSelected(kind, ids) {
+      state = { ...state, selected: { ...state.selected, [kind]: [...new Set(ids)] } };
+      save();
+    },
     setSetting(key, value) {
       state = { ...state, settings: { ...state.settings, [key]: value } };
       save();
     },
-    /** Forgets everything but the settings, or one boss's tasks and kills. */
+    /** Forgets everything but the settings and the chosen tasks, or one boss's completed tasks and kills. */
     reset(kind) {
       state = kind
         ? {
             completed: Object.fromEntries(Object.entries(state.completed).filter(([key]) => !key.startsWith(kind + ":"))),
             kills: Object.fromEntries(Object.entries(state.kills).filter(([key]) => key !== kind)),
+            selected: state.selected,
             settings: state.settings,
           }
-        : { ...empty(), settings: state.settings };
+        : { ...empty(), selected: state.selected, settings: state.settings };
       save();
     },
   };

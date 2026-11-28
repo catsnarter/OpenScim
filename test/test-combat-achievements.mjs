@@ -8,7 +8,7 @@ import { runScenario, loadEnvironment } from "../tools/determinism/harness.mjs";
 import { scenarios } from "../tools/determinism/scenarios/alchemical-hydra.mjs";
 
 await loadEnvironment(); // its module hooks resolve the client's web-root imports
-const { createCombatAchievementsTracker, getCombatAchievements, judgeKill, ticksUnder, formatTicks, tierPoints, killTicks } = await import(
+const { createCombatAchievementsTracker, getCombatAchievements, judgeKill, ticksUnder, formatTicks, tierPoints, killTicks, runResults } = await import(
   "../client/combatAchievements/tracker.js"
 );
 const { createCombatAchievementsStore } = await import("../client/combatAchievements/store.js");
@@ -104,6 +104,24 @@ async function track(name, storage = memoryStorage()) {
     assert.equal(failedAt[id], undefined, id);
   }
   assert.equal(failedAt.mixing_correctly === undefined, !run.facts.empowered);
+  // The victory screen's list of the tasks chosen to go for (runResults), in the boss's order: a task failed in
+  // the fight, with its reason and tick; one the fight did not fail, failed as the kill did not count, from the
+  // tick the aid was first seen.
+  const hydra = getCombatAchievements("alchemical_hydra");
+  const chosen = ["the_flame_skipper", "alcleanical_hydra", "alchemical_veteran"];
+  assert.deepEqual(runResults(run, hydra, chosen).map(({ task, status, reason, tick }) => [task.id, status, reason, tick]), [
+    ["alchemical_veteran", "failed", "The kill did not count: infinite health.", 0],
+    ["alcleanical_hydra", "failed", "The kill did not count: infinite health.", 0],
+    ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
+  ]);
+  // The same fight as a clean kill: completed on the kill's tick, or a kill count still short.
+  const cleanRun = { ...run, assisted: new Set(), aids: {} };
+  assert.deepEqual(runResults(cleanRun, hydra, chosen, { kills: 1, streak: 1 }).map(({ task, status, reason, tick }) => [task.id, status, reason, tick]), [
+    ["alchemical_veteran", "not completed", "1/75 so far.", undefined],
+    ["alcleanical_hydra", "completed", undefined, run.killTick],
+    ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
+  ]);
+  assert.deepEqual(runResults(run, hydra, []), [], "nothing chosen, nothing listed");
 }
 
 {
@@ -123,8 +141,12 @@ async function track(name, storage = memoryStorage()) {
   const again = createCombatAchievementsStore(storage);
   assert.equal(again.getState().kills.alchemical_hydra, 2);
   assert.ok(again.completedKeys().has("alchemical_hydra:lightning_lure"));
+  // The tasks chosen to go for: kept, read back, and kept through a boss's reset.
+  again.setSelected("alchemical_hydra", ["lightning_lure", "dont_flame_me", "lightning_lure"]);
+  assert.deepEqual(createCombatAchievementsStore(storage).selectedFor("alchemical_hydra"), ["lightning_lure", "dont_flame_me"]);
+  assert.deepEqual(again.selectedFor("vorkath"), []);
   again.reset("alchemical_hydra");
-  assert.deepEqual(again.getState(), { completed: {}, kills: {}, settings: { failureMessages: true, repeatFailureMessages: false } });
+  assert.deepEqual(again.getState(), { completed: {}, kills: {}, selected: { alchemical_hydra: ["lightning_lure", "dont_flame_me"] }, settings: { failureMessages: true, repeatFailureMessages: false } });
   // Storage that refuses: the progress stays for the visit.
   const refusing = createCombatAchievementsStore({ getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } });
   assert.equal(refusing.recordKill("alchemical_hydra"), 1);

@@ -6,7 +6,7 @@
 // assets/application.js hands it the engine and each tick the game loop
 // publishes; replays publish none, so a replay never counts.
 import { createCombatAchievementsStore } from "./store.js";
-import { createCombatAchievementsTracker, tierPoints } from "./tracker.js";
+import { createCombatAchievementsTracker, getCombatAchievements, runResults, tierPoints, tierOrder } from "./tracker.js";
 import { clearChat, tellCompleted, tellFailed, tellAssisted } from "./chat.js";
 
 export const combatAchievementsStore = createCombatAchievementsStore(globalThis.localStorage);
@@ -25,8 +25,10 @@ const tracker = createCombatAchievementsTracker({
       setTimeout(() => showCompleted(task), n * 2600);
     }),
   onFail: (kind, failures, tick) => {
+    // A task chosen to go for (the setup's list) is always told; the others as the settings say.
     const { settings } = combatAchievementsStore.getState();
-    const told = failures.filter((failure) => (failure.repeat ? settings.repeatFailureMessages : settings.failureMessages));
+    const chosen = new Set(combatAchievementsStore.selectedFor(kind));
+    const told = failures.filter((failure) => chosen.has(failure.task.id) || (failure.repeat ? settings.repeatFailureMessages : settings.failureMessages));
     if (told.length) tellFailed(told, tick);
   },
   onAssisted: (reasons, tick) => tellAssisted(reasons, tick),
@@ -41,6 +43,14 @@ export function setCombatAchievementsEngine(source) {
 }
 export const getCombatAchievementsEngine = () => getEngine();
 export const currentRun = () => tracker.currentRun();
+export { getCombatAchievements, tierOrder, tierPoints };
+
+/** How the tasks chosen to go for stand in the current fight (runs.js, runResults), for the victory screen. */
+export function currentResults() {
+  const run = tracker.currentRun();
+  if (!run) return [];
+  return runResults(run, getCombatAchievements(run.kind), combatAchievementsStore.selectedFor(run.kind));
+}
 export const currentStreak = () => tracker.streak();
 
 /** After each tick of the live fight, with that tick's events. */
