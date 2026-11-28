@@ -31,11 +31,13 @@ try {
   // Folded until opened: its header says so, and none of its boxes is showing.
   assert.equal(await list.evaluate((fold) => fold.open), false);
   assert.equal(await list.locator("summary").innerText(), "Tasks to go for");
-  assert.equal(await list.locator('input[type="checkbox"]:visible').count(), 0);
+  assert.equal(await list.locator('[role="checkbox"]:visible').count(), 0);
   await list.locator("summary").click();
-  assert.equal(await list.locator('input[type="checkbox"]').count(), 12);
+  // The application's own checkboxes, as the practice aids' (Infinite Health).
+  assert.equal(await list.locator('button.osrs-checkbox[role="checkbox"]').count(), 12);
   for (const name of ["Alcleanical Hydra", "Alchemical Veteran"]) await page.getByRole("checkbox", { name }).first().check();
   assert.match(await list.innerText(), /2 to go for/);
+  assert.equal(await list.locator(".osrs-checkbox__mark").count(), 2, "a ticked box shows its mark");
   assert.equal(await list.locator("summary").innerText(), "Tasks to go for (2 chosen)");
   assert.equal(await list.evaluate((fold) => fold.open), true, "still open after a box is ticked");
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("openscim.combatAchievements.v1")).selected.alchemical_hydra), ["alcleanical_hydra", "alchemical_veteran"]);

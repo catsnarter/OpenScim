@@ -13,10 +13,9 @@ export const combatAchievementsCss = `
 .ca-setup { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: 13px; color: var(--color-text-body, #cec0a3); }
 .ca-setup__note { margin: 0 0 4px; color: var(--color-text-muted, #9f9f9f); font-size: 12px; }
 .ca-setup__tier { margin-top: 6px; color: #ffff00; }
-.ca-setup__task { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
-.ca-setup__task input { margin-top: 2px; flex: none; }
-.ca-setup__name--done { color: #0dc10d; }
-.ca-setup__detail { display: block; color: var(--color-text-muted, #9f9f9f); font-size: 11px; }
+.ca-setup__task { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+.ca-setup .osrs-checkbox__label.ca-setup__name--done { color: #0dc10d; }
+.ca-setup__detail { display: block; margin: 0 0 2px 22px; color: var(--color-text-muted, #9f9f9f); font-size: 11px; }
 .ca-setup__clear { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 12px; color: var(--color-text-body, #cec0a3);
   background: none; border: 1px solid var(--color-border, #5a4a2c); cursor: pointer; padding: 1px 6px; }
 .victory-modal-ca { margin-top: 12px; }
@@ -80,15 +79,20 @@ export function mountCombatAchievementsSetup(root, kind) {
       list.append(el("div", "ca-setup__tier", `${tierLabel(tier)} (${points} pt${points === 1 ? "" : "s"} each)`));
       for (const task of tasks) {
         const done = Boolean(completed[taskKey(kind, task)]);
-        const row = el("label", "ca-setup__task");
-        const box = el("input");
-        box.type = "checkbox";
-        box.checked = chosen.has(task.id);
+        const on = chosen.has(task.id);
+        // The application's own checkbox, as the practice aids' (Infinite Health): a button with the checkbox's role.
+        const row = el("div", "setting-row ca-setup__task");
+        const box = el("button", "osrs-checkbox");
+        box.type = "button";
+        box.setAttribute("role", "checkbox");
+        box.setAttribute("aria-checked", String(on));
         box.setAttribute("aria-label", task.name);
-        box.addEventListener("change", () => choose(task.id, box.checked));
-        const text = el("span");
-        text.append(el("span", "ca-setup__name" + (done ? " ca-setup__name--done" : ""), task.name + (done ? " (completed)" : "")), el("span", "ca-setup__detail", task.description));
-        row.append(box, text);
+        box.addEventListener("click", () => choose(task.id, !on));
+        // A ticked box has its mark in it (Grid.js, OsrsCheckbox).
+        const square = el("span", "osrs-checkbox__box");
+        if (on) square.append(el("span", "osrs-checkbox__mark"));
+        box.append(square, el("span", "osrs-checkbox__label ca-setup__name" + (done ? " ca-setup__name--done" : ""), task.name + (done ? " (completed)" : "")));
+        row.append(box, el("span", "ca-setup__detail", task.description));
         list.append(row);
       }
     }
