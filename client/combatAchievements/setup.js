@@ -16,6 +16,7 @@ export const combatAchievementsCss = `
 .ca-setup__tier { margin-top: 6px; color: #ffff00; }
 .ca-setup__task { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
 .ca-setup .osrs-checkbox__label.ca-setup__name--done { color: #0dc10d; }
+.ca-setup .osrs-checkbox:disabled { cursor: default; opacity: 0.55; }
 .ca-setup__detail { display: block; margin: 0 0 2px 22px; color: var(--color-text-muted, #9f9f9f); font-size: 11px; }
 .ca-setup__clear { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 12px; color: var(--color-text-body, #cec0a3);
   background: none; border: 1px solid var(--color-border, #5a4a2c); cursor: pointer; padding: 1px 6px; }
@@ -61,13 +62,15 @@ export function mountCombatAchievementsSetup(root, kind) {
     list.replaceChildren();
     fold.hidden = !achievements;
     if (!achievements) return;
+    // The progress is kept under the boss's first kind (bosses.js); the fights by the kind fought.
+    const progressKind = achievements.kind;
     const { completed } = combatAchievementsStore.getState();
-    const chosen = new Set(combatAchievementsStore.selectedFor(kind));
+    const chosen = new Set(combatAchievementsStore.selectedFor(progressKind));
     summary.textContent = "Tasks to go for" + (chosen.size > 0 ? ` (${chosen.size} chosen)` : "");
-    const choose = (id, on) => combatAchievementsStore.setSelected(kind, on ? [...chosen, id] : [...chosen].filter((other) => other !== id));
+    const choose = (id, on) => combatAchievementsStore.setSelected(progressKind, on ? [...chosen, id] : [...chosen].filter((other) => other !== id));
     // Every fight of the boss that ended: kills (those that counted, as a kill with an aid does not) and deaths.
     const fights = combatAchievementsStore.fightsOf(kind);
-    const counted = combatAchievementsStore.getState().kills[kind] ?? 0;
+    const counted = combatAchievementsStore.getState().kills[progressKind] ?? 0;
     const record = el("p", "ca-setup__record", `Kills: ${fights.kills} (${counted} counted) · Deaths: ${fights.deaths}`);
     record.dataset.testid = "combat-achievements-record";
     list.append(
@@ -76,7 +79,8 @@ export function mountCombatAchievementsSetup(root, kind) {
         "p",
         "ca-setup__note",
         (chosen.size > 0 ? chosen.size + " to go for. " : "Choose the tasks to go for. ") +
-          "Each is told in the chat if it fails, and the victory screen says how each went.",
+          "Each is told in the chat if it fails, and the victory screen says how each went." +
+          (achievements.tasks.some((task) => !task.tracked) ? " A task not tracked yet cannot be chosen." : ""),
       ),
     );
     for (const tier of tierOrder) {
@@ -85,8 +89,8 @@ export function mountCombatAchievementsSetup(root, kind) {
       const points = tierPoints[tier];
       list.append(el("div", "ca-setup__tier", `${tierLabel(tier)} (${points} pt${points === 1 ? "" : "s"} each)`));
       for (const task of tasks) {
-        const done = Boolean(completed[taskKey(kind, task)]);
-        const on = chosen.has(task.id);
+        const done = Boolean(completed[taskKey(progressKind, task)]);
+        const on = task.tracked && chosen.has(task.id);
         // The application's own checkbox, as the practice aids' (Infinite Health): a button with the checkbox's role.
         const row = el("div", "setting-row ca-setup__task");
         const box = el("button", "osrs-checkbox");
@@ -94,11 +98,15 @@ export function mountCombatAchievementsSetup(root, kind) {
         box.setAttribute("role", "checkbox");
         box.setAttribute("aria-checked", String(on));
         box.setAttribute("aria-label", task.name);
-        box.addEventListener("click", () => choose(task.id, !on));
+        if (task.tracked) box.addEventListener("click", () => choose(task.id, !on));
+        else {
+          box.disabled = true;
+          box.setAttribute("aria-disabled", "true");
+        }
         // A ticked box has its mark in it (Grid.js, OsrsCheckbox).
         const square = el("span", "osrs-checkbox__box");
         if (on) square.append(el("span", "osrs-checkbox__mark"));
-        box.append(square, el("span", "osrs-checkbox__label ca-setup__name" + (done ? " ca-setup__name--done" : ""), task.name + (done ? " (completed)" : "")));
+        box.append(square, el("span", "osrs-checkbox__label ca-setup__name" + (done ? " ca-setup__name--done" : ""), task.name + (done ? " (completed)" : task.tracked ? "" : " (not tracked yet)")));
         row.append(box, el("span", "ca-setup__detail", task.description));
         list.append(row);
       }

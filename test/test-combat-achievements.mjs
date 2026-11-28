@@ -54,7 +54,47 @@ async function track(name, storage = memoryStorage()) {
   assert.equal(tasks.length, 12);
   assert.equal(tasks.reduce((sum, task) => sum + tierPoints[task.tier], 0), 61);
   assert.equal(new Set(tasks.map((task) => task.id)).size, 12);
-  assert.equal(getCombatAchievements("inferno"), null);
+  assert.ok(tasks.every((task) => task.tracked), "all twelve judged: six by its own judges, six by the shared ones");
+  assert.equal(getCombatAchievements("lobby"), null);
+  // The Inferno is a part of the whole here: its tasks are listed, none judged.
+  assert.ok(getCombatAchievements("inferno").tasks.length > 0 && getCombatAchievements("inferno").tasks.every((task) => !task.tracked));
+  // A variant is kept under its boss: the awakened Duke's tasks are the Duke's.
+  assert.equal(getCombatAchievements("duke_sucellus_awakened"), getCombatAchievements("duke_sucellus"));
+}
+
+{
+  // The shared judges read the wiki's wording.
+  const { sharedJudge } = await import("../client/combatAchievements/judges.js");
+  const { combatAchievementTasks } = await import("../client/combatAchievements/tasks.js");
+  const vorkath = { monster: "Vorkath", kinds: ["vorkath"] };
+  const task = (description, monster = "Vorkath") => ({ monster, description });
+  const limit = (judge) => {
+    let ticks = 0;
+    while (!judge.failed({ startTick: 0, killTick: null, lastTick: ticks })) ticks++;
+    return ticks - 1;
+  };
+  // "less than" leaves the time out; "within" lets it in (inferred).
+  assert.equal(limit(sharedJudge(task("Kill Vorkath in less than 54 seconds."), vorkath)), 89);
+  assert.equal(limit(sharedJudge(task("Kill Vorkath in less than 1 minute and 15 seconds."), vorkath)), 124);
+  assert.equal(limit(sharedJudge(task("Kill the Alchemical Hydra in less than 1 minute 20 seconds.", "Alchemical Hydra"), vorkath)), 133);
+  assert.equal(limit(sharedJudge(task("Kill the Leviathan in less than 1:50 without a slayer task.", "Leviathan"), vorkath)), 183);
+  assert.equal(limit(sharedJudge(task("Kill Phosani's Nightmare within 6 minutes.", "Phosani's Nightmare"), vorkath)), 600);
+  assert.equal(sharedJudge(task("Kill Vorkath 50 times."), vorkath).target({ kills: 7 }).of, 50);
+  assert.equal(sharedJudge(task("Kill the Maggot King.", "Maggot King"), vorkath).target({ kills: 0 }).of, 1);
+  assert.equal(sharedJudge(task("Kill Vorkath 10 times without leaving his area."), vorkath).check({}, { kills: 99, streak: 9 }), false);
+  const awakened = sharedJudge(task("Kill Awakened Duke Sucellus.", "Duke Sucellus"), { monster: "Duke Sucellus", awakened: "duke_sucellus_awakened" });
+  assert.equal(awakened.check({ variant: "duke_sucellus_awakened" }), true);
+  assert.equal(awakened.check({ variant: "duke_sucellus" }), false);
+  // Worded otherwise: left to the boss's own judges.
+  for (const description of ["Kill Vorkath with only your fists.", "Kill Araxxor 4 times in 10:00.", "Kill Vorkath's zombified spawn without using crumble undead."])
+    assert.equal(sharedJudge(task(description), vorkath), null, description);
+  // The data: a name once a monster, every tier one with points.
+  const seen = new Set();
+  for (const { monster, name, tier } of combatAchievementTasks) {
+    assert.ok(!seen.has(monster + ":" + name), name);
+    seen.add(monster + ":" + name);
+    assert.ok(tierPoints[tier], tier);
+  }
 }
 
 {
@@ -117,8 +157,8 @@ async function track(name, storage = memoryStorage()) {
   assert.equal(assisted.chosen, true);
   assert.deepEqual(rowsOf(assisted), [
     ["alchemical_veteran", "failed", "The kill did not count.", 0],
-    ["alcleanical_hydra", "failed", "The kill did not count.", 0],
     ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
+    ["alcleanical_hydra", "failed", "The kill did not count.", 0],
   ]);
   // None chosen: every task the fight failed on its own, and none it did not.
   const all = runSummary(run, hydra, []);
@@ -132,8 +172,8 @@ async function track(name, storage = memoryStorage()) {
   assert.equal(cleanSummary.notCounted, null);
   assert.deepEqual(rowsOf(cleanSummary), [
     ["alchemical_veteran", "not completed", "1/75 so far.", undefined],
-    ["alcleanical_hydra", "completed", undefined, run.killTick],
     ["the_flame_skipper", "failed", "The Alchemical Hydra spawned a flame wall attack.", failedAt.the_flame_skipper],
+    ["alcleanical_hydra", "completed", undefined, run.killTick],
   ]);
   const cleanAll = runSummary(cleanRun, hydra, [], { kills: 1, streak: 1 });
   assert.ok(cleanAll.rows.some((row) => row.task.id === "alcleanical_hydra" && row.status === "completed"));

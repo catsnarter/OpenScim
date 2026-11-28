@@ -1,19 +1,25 @@
 // Combat achievements: what a fight did, tick by tick, and which of its boss's
 // tasks (WIKI: Combat Achievements) a kill completes.
 //
-// A boss lists its tasks in its descriptor (encounters/registry.js):
+// A boss's tasks are the wiki's (tasks.js, written by
+// tools/fetch-combat-achievements.mjs), for the encounters bosses.js names. Each
+// is judged by its boss's own judge, or else by a shared one when its
+// description is worded as many bosses' are (judges.js); a task with neither is
+// listed as not tracked. A boss's own judges are in its descriptor
+// (encounters/registry.js):
 //
 //   combatAchievements: {
 //     observe(state, facts)   optional: called each tick with the encounter's
 //                             snapshot state (getEncounterSnapshot().state);
 //                             writes what its tasks need into `facts`
-//     tasks: [{ id, name, tier, type, description, check(run, progress) }],
+//     judges: { "<task name>": { check(run, progress), failed?(run), target?(progress) } },
 //   }
 //
 // `check` answers on a kill that counts: `run` is what this module kept of the
 // fight (below), `progress` the player's kills of the boss, this one included
 // ({ kills, streak }). A task whose `target(progress)` is given also shows how
-// far along it is ({ current, of }).
+// far along it is ({ current, of }). The player's progress is kept under the
+// boss's first kind (bosses.js), `run.kind`; `run.variant` is the kind fought.
 //
 // Only a clean kill counts, as one with a plugin or a cheat would not in the
 // game: none with infinite health or infinite special attack, none where an
@@ -27,15 +33,39 @@
 // nothing in the engine but the three methods it wraps to see an aid used,
 // so a fight runs and digests the same with it as without.
 import { encounterRegistry } from "../encounters/registry.js";
-import { newRun, observeTick, judgeKill, taskKey, newlyFailed, newlyAssisted, noteAid as noteRunAid } from "./runs.js";
+import { combatAchievementTasks } from "./tasks.js";
+import { bossOfKind } from "./bosses.js";
+import { sharedJudge } from "./judges.js";
+import { newRun, observeTick, judgeKill, taskKey, newlyFailed, newlyAssisted, noteAid as noteRunAid, tierOrder } from "./runs.js";
 
 export * from "./runs.js";
 
-/** The combat achievements of a kind: { observe?, tasks }, or null. */
+/** A task's id here: its name, in lower case with underscores ("Don't Flame Me": "dont_flame_me"). */
+export const taskId = (name) => name.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+const built = new Map();
+/**
+ * The combat achievements of a kind: { kind, monster, observe?, tasks }, or null. `kind` is the one the progress
+ * is kept under (bosses.js). Each task is { id, gameId, name, monster, description, tier, type, tracked } with its
+ * judge's check, failed and target; one not tracked has no check.
+ */
 export function getCombatAchievements(kind) {
-  if (!kind) return null;
-  const descriptor = encounterRegistry.getDescriptorOfKindOrVariant(kind);
-  return descriptor?.combatAchievements ?? null;
+  const boss = kind ? bossOfKind(kind) : null;
+  if (!boss) return null;
+  if (built.has(boss)) return built.get(boss);
+  const own = encounterRegistry.getDescriptorOfKindOrVariant(boss.kinds[0])?.combatAchievements ?? {};
+  const judges = own.judges ?? {};
+  const tasks = combatAchievementTasks
+    .filter((task) => task.monster === boss.monster)
+    .map((task) => {
+      const judge = judges[task.name] ?? (boss.shared === false ? null : sharedJudge(task, boss));
+      return { ...task, id: taskId(task.name), ...judge, tracked: Boolean(judge?.check) };
+    })
+    // By tier, as the wiki's lists of a boss's tasks are, and the game's order within one.
+    .sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier) || a.gameId - b.gameId);
+  const achievements = { kind: boss.kinds[0], monster: boss.monster, observe: own.observe, tasks };
+  built.set(boss, achievements);
+  return achievements;
 }
 
 /**
@@ -91,14 +121,17 @@ export function createCombatAchievementsTracker({
 
   function observe(engine, events = []) {
     if (!engine) return;
-    const kind = engine.getEncounterKind?.();
-    const achievements = getCombatAchievements(kind);
+    const variant = engine.getEncounterKind?.();
+    const achievements = getCombatAchievements(variant);
+    // The progress is kept under the boss's first kind (bosses.js); the fights are counted by the kind fought.
+    const kind = achievements?.kind ?? variant;
     const tick = engine.getState().currentTick;
     watch(engine);
-    if (!run || engine !== engineSeen || kind !== run.kind || tick <= run.lastTick) {
-      if (kind !== streak.kind) streak = { kind, count: 0 };
+    if (!run || engine !== engineSeen || variant !== run.variant || tick <= run.lastTick) {
+      if (variant !== streak.kind) streak = { kind: variant, count: 0 };
       engineSeen = engine;
       run = newRun(kind, Math.max(0, tick - 1)); // the tick before the first seen: the fight's start
+      run.variant = variant;
       // A fight taken over part-way (a replay's Take over) does not count.
       if (tick > 1) noteRunAid(run, "started part-way");
       onRunStart(run);
@@ -106,7 +139,7 @@ export function createCombatAchievementsTracker({
     const before = run.ended;
     observeTick(run, engine, events, achievements);
     // Every fight that ends, of any boss, counted or not: a kill or a death, once a fight.
-    if (!before && run.ended) store.recordFight(kind, run.ended);
+    if (!before && run.ended) store.recordFight(variant, run.ended);
     if (!achievements) return;
     if (before) {
       onRunChange(run);

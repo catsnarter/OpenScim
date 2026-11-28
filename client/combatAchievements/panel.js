@@ -20,6 +20,7 @@ const css = `
 .ca-task { margin-top: 3px; cursor: default; }
 .ca-task__name { color: #ff3030; }
 .ca-task--done .ca-task__name { color: #0dc10d; }
+.ca-task--untracked { opacity: 0.6; }
 .ca-task__detail { color: #cec0a3; font-size: 12px; line-height: 1.15; margin-top: 1px; }
 .ca-panel__reset { margin-top: 8px; width: 100%; font: inherit; color: #cec0a3; background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(0, 0, 0, 0.55); cursor: pointer; text-shadow: 1px 1px #000; }
@@ -33,7 +34,7 @@ function el(tag, className, text) {
 }
 
 function runLine(run, kind) {
-  if (!run || run.kind !== kind || run.lastTick <= run.startTick) return ["idle", "Start the fight: a clean kill counts."];
+  if (!run || run.variant !== kind || run.lastTick <= run.startTick) return ["idle", "Start the fight: a clean kill counts."];
   if (run.assisted.size > 0) return ["not", "This kill won't count: " + [...run.assisted].join(", ") + "."];
   if (run.ended === "death") return ["not", "You died: this run won't count."];
   if (run.ended === "kill") return ["counts", "Kill counted."];
@@ -61,29 +62,32 @@ export function mountCombatAchievementsPanel(root) {
       return;
     }
     const tasks = achievements.tasks;
-    const done = tasks.filter((task) => completed[taskKey(kind, task)]);
+    const fought = kind;
+    const progressKind = achievements.kind; // the boss's first kind (bosses.js), its progress kept under it
+    const done = tasks.filter((task) => completed[taskKey(progressKind, task)]);
     const points = (list) => list.reduce((sum, task) => sum + tierPoints[task.tier], 0);
     const summary = el("div", "ca-panel__line");
     summary.append(el("span", "", `Tasks: ${done.length}/${tasks.length}`), el("span", "", `Points: ${points(done)}/${points(tasks)}`));
     // Every fight that ended: its kills (those that counted, for the kill-count tasks) and deaths.
-    const fights = combatAchievementsStore.fightsOf(kind);
+    const fights = combatAchievementsStore.fightsOf(fought);
     const killLine = el("div", "ca-panel__line");
-    killLine.append(el("span", "", `Kills: ${fights.kills} (${kills[kind] ?? 0} counted)`), el("span", "", `Deaths: ${fights.deaths}`));
+    killLine.append(el("span", "", `Kills: ${fights.kills} (${kills[progressKind] ?? 0} counted)`), el("span", "", `Deaths: ${fights.deaths}`));
     const streakLine = el("div", "ca-panel__line");
-    streakLine.append(el("span", "", `In a row: ${currentStreak()}`));
+    const untracked = tasks.filter((task) => !task.tracked).length;
+    streakLine.append(el("span", "", `In a row: ${currentStreak()}`), el("span", "", untracked ? `Not tracked yet: ${untracked}` : ""));
     panel.append(summary, killLine, streakLine, runNode);
     runText = "";
     updateRun();
-    const progress = { kills: kills[kind] ?? 0, streak: currentStreak() };
+    const progress = { kills: kills[progressKind] ?? 0, streak: currentStreak() };
     for (const tier of tierOrder) {
       const ofTier = tasks.filter((task) => task.tier === tier);
       if (!ofTier.length) continue;
       panel.append(el("div", "ca-panel__tier", `${tierLabel(tier)} (${tierPoints[tier]} pt${tierPoints[tier] === 1 ? "" : "s"} each)`));
       for (const task of ofTier) {
-        const isDone = Boolean(completed[taskKey(kind, task)]);
-        const row = el("div", "ca-task" + (isDone ? " ca-task--done" : ""));
-        row.title = `${task.type} task${isDone ? ", completed " + new Date(completed[taskKey(kind, task)]).toLocaleDateString() : ""}`;
-        row.append(el("div", "ca-task__name", task.name));
+        const isDone = Boolean(completed[taskKey(progressKind, task)]);
+        const row = el("div", "ca-task" + (isDone ? " ca-task--done" : "") + (task.tracked ? "" : " ca-task--untracked"));
+        row.title = `${task.type} task${isDone ? ", completed " + new Date(completed[taskKey(progressKind, task)]).toLocaleDateString() : task.tracked ? "" : ", not tracked here yet"}`;
+        row.append(el("div", "ca-task__name", task.name + (task.tracked ? "" : " (not tracked yet)")));
         const target = !isDone && task.target ? task.target(progress) : null;
         row.append(el("div", "ca-task__detail", task.description + (target ? ` (${target.current}/${target.of})` : "")));
         panel.append(row);
@@ -92,7 +96,7 @@ export function mountCombatAchievementsPanel(root) {
     const reset = el("button", "ca-panel__reset", "Reset this boss's progress");
     reset.type = "button";
     reset.addEventListener("click", () => {
-      if (window.confirm("Forget this boss's completed tasks and kill count, in this browser?")) combatAchievementsStore.reset(kind);
+      if (window.confirm("Forget this boss's completed tasks and kill count, in this browser?")) combatAchievementsStore.reset(progressKind);
     });
     panel.append(reset);
   }

@@ -22,6 +22,7 @@ export const taskKey = (kind, task) => `${kind}:${task.id}`;
 export function newRun(kind, startTick) {
   return {
     kind,
+    variant: kind, // the encounter kind fought: `kind`, or a variant kept under it (bosses.js)
     startTick,
     lastTick: startTick,
     assisted: new Set(),
@@ -99,7 +100,7 @@ export function noteAid(run, reason) {
 /** The tasks a clean kill completes that `completed` (a Set of task keys) does not hold yet. */
 export function judgeKill(run, achievements, progress, completed) {
   if (run.ended !== "kill" || run.assisted.size > 0 || !achievements) return [];
-  return achievements.tasks.filter((task) => !completed.has(taskKey(run.kind, task)) && task.check(run, progress));
+  return achievements.tasks.filter((task) => task.check && !completed.has(taskKey(run.kind, task)) && task.check(run, progress));
 }
 
 /**
@@ -150,10 +151,11 @@ export function runSummary(run, achievements, selectedIds, progress = run?.progr
       ? { reasons: [...seen.map(([reason]) => reason), ...[...run.assisted].filter((reason) => !(reason in run.aids))], tick: seen[0]?.[1] ?? run.startTick }
       : null;
   const selected = new Set(selectedIds);
-  const chosen = achievements.tasks.some((task) => selected.has(task.id));
+  const chosen = achievements.tasks.some((task) => task.check && selected.has(task.id));
   const clean = run.ended === "kill" && !notCounted;
   const rows = [];
   for (const task of achievements.tasks) {
+    if (!task.check) continue; // not tracked
     const failure = run.failures[task.id];
     if (!chosen) {
       if (failure) rows.push({ task, status: "failed", reason: failure.reason, tick: failure.tick });
