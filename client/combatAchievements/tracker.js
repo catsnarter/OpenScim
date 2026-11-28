@@ -103,14 +103,11 @@ export function createCombatAchievementsTracker({
       if (tick > 1) noteRunAid(run, "started part-way");
       onRunStart(run);
     }
-    if (!achievements) {
-      run.lastTick = tick;
-      return;
-    }
     const before = run.ended;
     observeTick(run, engine, events, achievements);
-    // Every fight that ends, counted or not: a kill or a death, once a fight.
+    // Every fight that ends, of any boss, counted or not: a kill or a death, once a fight.
     if (!before && run.ended) store.recordFight(kind, run.ended);
+    if (!achievements) return;
     if (before) {
       onRunChange(run);
       return;

@@ -11,8 +11,9 @@ const storageKey = "openscim.combatAchievements.v1";
 // The settings, the game's two of failures (WIKI: Settings, Chat, Game Chat): `failureMessages`,
 // "Combat Achievements Tasks - Failure", a line in the chat as a task fails; `repeatFailureMessages`,
 // "Combat Achievements Tasks - Repeat failure", the same for a task completed before. inferred: the
-// wiki gives no defaults; the first is on, as it was asked for, the second off.
-export const defaultSettings = { failureMessages: true, repeatFailureMessages: false };
+// wiki gives no defaults; the first is on, as it was asked for, the second off. And this application's own,
+// `showRecord`: the boss's kills, deaths and their ratio in the header of its setup (on).
+export const defaultSettings = { failureMessages: true, repeatFailureMessages: false, showRecord: true };
 
 const empty = () => ({ completed: {}, kills: {}, fights: {}, selected: {}, settings: { ...defaultSettings } });
 

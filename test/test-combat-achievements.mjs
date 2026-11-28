@@ -162,7 +162,7 @@ async function track(name, storage = memoryStorage()) {
   assert.deepEqual(createCombatAchievementsStore(storage).selectedFor("alchemical_hydra"), ["lightning_lure", "dont_flame_me"]);
   assert.deepEqual(again.selectedFor("vorkath"), []);
   again.reset("alchemical_hydra");
-  assert.deepEqual(again.getState(), { completed: {}, kills: {}, fights: {}, selected: { alchemical_hydra: ["lightning_lure", "dont_flame_me"] }, settings: { failureMessages: true, repeatFailureMessages: false } });
+  assert.deepEqual(again.getState(), { completed: {}, kills: {}, fights: {}, selected: { alchemical_hydra: ["lightning_lure", "dont_flame_me"] }, settings: { failureMessages: true, repeatFailureMessages: false, showRecord: true } });
   // Every fight that ended: kills and deaths, kept, and forgotten with the boss.
   again.recordFight("alchemical_hydra", "kill");
   again.recordFight("alchemical_hydra", "death");

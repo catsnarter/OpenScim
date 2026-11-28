@@ -17005,6 +17005,9 @@ var EncounterPanel = ({
                     className: "encounter-description",
                     children: description,
                   }),
+                  (0, jsxRuntime.jsx)(EncounterRecord, {
+                    kind: encounterKind,
+                  }),
                   h9 &&
                     (0, jsxRuntime.jsxs)("p", {
                       className: "encounter-beta-note",
@@ -31268,6 +31271,24 @@ const COMBAT_ACHIEVEMENT_CHAT_SETTINGS = [
   ["failureMessages", "Combat Achievements Tasks - Failure", "Failing a combat task is followed by a chatbox message saying why it failed."],
   ["repeatFailureMessages", "Combat Achievements Tasks - Repeat failure", "The same, for a combat task already completed."],
 ];
+// The setup header's line of the boss's fights, kept in this browser (client/combatAchievements/store.js, `fights`):
+// the kills, the deaths, and kills to deaths (the kills alone before a death). Settings, Interface, Game chat turns
+// it off.
+const formatRatio = (kills, deaths) => (deaths > 0 ? kills / deaths : kills).toFixed(2);
+function EncounterRecord({ kind: kind }) {
+  const state = (0, React.useSyncExternalStore)(combatAchievementsStore.subscribe, combatAchievementsStore.getState);
+  if (!kind || !state.settings.showRecord) {
+    return null;
+  }
+  const { kills, deaths } = combatAchievementsStore.fightsOf(kind);
+  return (0, jsxRuntime.jsx)("p", {
+    className: "encounter-record",
+    "data-testid": "encounter-record",
+    style: { margin: "4px 0 0", fontSize: "13px", color: "var(--color-text-body, #cec0a3)" },
+    children: "Kills: " + kills + " · Deaths: " + deaths + " · K/D: " + formatRatio(kills, deaths),
+  });
+}
+const ENCOUNTER_RECORD_SETTINGS = [["showRecord", "Boss kill record", "The boss's kills, deaths and kill to death ratio, in the header of its setup."]];
 // The setup window's list of a boss's combat achievements to go for (client/combatAchievements/setup.js, mounted
 // here). The victory screen lists how each chosen task went (CombatAchievementsResults).
 function CombatAchievementsSetup({ kind: kind }) {
@@ -31371,7 +31392,7 @@ function CombatAchievementsChatControl() {
     className: "control-group",
     children: [
       (0, jsxRuntime.jsx)("div", { className: "group-title", children: "Game chat" }),
-      ...COMBAT_ACHIEVEMENT_CHAT_SETTINGS.map(([key, label, hint]) =>
+      ...[...COMBAT_ACHIEVEMENT_CHAT_SETTINGS, ...ENCOUNTER_RECORD_SETTINGS].map(([key, label, hint]) =>
         (0, jsxRuntime.jsx)(
           SettingRow,
           {
