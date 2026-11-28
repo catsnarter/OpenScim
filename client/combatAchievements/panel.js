@@ -65,9 +65,13 @@ export function mountCombatAchievementsPanel(root) {
     const points = (list) => list.reduce((sum, task) => sum + tierPoints[task.tier], 0);
     const summary = el("div", "ca-panel__line");
     summary.append(el("span", "", `Tasks: ${done.length}/${tasks.length}`), el("span", "", `Points: ${points(done)}/${points(tasks)}`));
+    // Every fight that ended: its kills (those that counted, for the kill-count tasks) and deaths.
+    const fights = combatAchievementsStore.fightsOf(kind);
     const killLine = el("div", "ca-panel__line");
-    killLine.append(el("span", "", `Kills: ${kills[kind] ?? 0}`), el("span", "", `In a row: ${currentStreak()}`));
-    panel.append(summary, killLine, runNode);
+    killLine.append(el("span", "", `Kills: ${fights.kills} (${kills[kind] ?? 0} counted)`), el("span", "", `Deaths: ${fights.deaths}`));
+    const streakLine = el("div", "ca-panel__line");
+    streakLine.append(el("span", "", `In a row: ${currentStreak()}`));
+    panel.append(summary, killLine, streakLine, runNode);
     runText = "";
     updateRun();
     const progress = { kills: kills[kind] ?? 0, streak: currentStreak() };

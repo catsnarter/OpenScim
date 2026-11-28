@@ -12,6 +12,7 @@ export const combatAchievementsCss = `
 .ca-setup__summary { cursor: pointer; color: var(--color-text-heading, #ff981f); user-select: none; }
 .ca-setup { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: 13px; color: var(--color-text-body, #cec0a3); }
 .ca-setup__note { margin: 0 0 4px; color: var(--color-text-muted, #9f9f9f); font-size: 12px; }
+.ca-setup__record { margin: 0 0 2px; color: var(--color-text-body, #cec0a3); font-size: 12px; }
 .ca-setup__tier { margin-top: 6px; color: #ffff00; }
 .ca-setup__task { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
 .ca-setup .osrs-checkbox__label.ca-setup__name--done { color: #0dc10d; }
@@ -64,7 +65,13 @@ export function mountCombatAchievementsSetup(root, kind) {
     const chosen = new Set(combatAchievementsStore.selectedFor(kind));
     summary.textContent = "Tasks to go for" + (chosen.size > 0 ? ` (${chosen.size} chosen)` : "");
     const choose = (id, on) => combatAchievementsStore.setSelected(kind, on ? [...chosen, id] : [...chosen].filter((other) => other !== id));
+    // Every fight of the boss that ended: kills (those that counted, as a kill with an aid does not) and deaths.
+    const fights = combatAchievementsStore.fightsOf(kind);
+    const counted = combatAchievementsStore.getState().kills[kind] ?? 0;
+    const record = el("p", "ca-setup__record", `Kills: ${fights.kills} (${counted} counted) · Deaths: ${fights.deaths}`);
+    record.dataset.testid = "combat-achievements-record";
     list.append(
+      record,
       el(
         "p",
         "ca-setup__note",

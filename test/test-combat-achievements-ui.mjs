@@ -37,6 +37,7 @@ try {
   assert.equal(await list.locator('button.osrs-checkbox[role="checkbox"]').count(), 12);
   for (const name of ["Alcleanical Hydra", "Alchemical Veteran"]) await page.getByRole("checkbox", { name }).first().check();
   assert.match(await list.innerText(), /2 to go for/);
+  assert.equal(await list.locator('[data-testid="combat-achievements-record"]').innerText(), "Kills: 0 (0 counted) · Deaths: 0");
   assert.equal(await list.locator(".osrs-checkbox__mark").count(), 2, "a ticked box shows its mark");
   assert.equal(await list.locator("summary").innerText(), "Tasks to go for (2 chosen)");
   assert.equal(await list.evaluate((fold) => fold.open), true, "still open after a box is ticked");
@@ -70,6 +71,9 @@ try {
     ["Failed", "Alcleanical Hydra", "You took damage."],
   ]);
   assert.ok(rows.every((row) => /^Tick \d+$/.test(row.tick)), JSON.stringify(rows));
+
+  // The kill is among the boss's fights, and did not count.
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("openscim.combatAchievements.v1")).fights.alchemical_hydra), { kills: 1, deaths: 0 });
 
   // With nothing chosen: every task the fight failed, each with its reason and tick.
   await page.evaluate(() => {

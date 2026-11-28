@@ -109,6 +109,8 @@ export function createCombatAchievementsTracker({
     }
     const before = run.ended;
     observeTick(run, engine, events, achievements);
+    // Every fight that ends, counted or not: a kill or a death, once a fight.
+    if (!before && run.ended) store.recordFight(kind, run.ended);
     if (before) {
       onRunChange(run);
       return;

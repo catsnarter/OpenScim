@@ -64,6 +64,8 @@ async function track(name, storage = memoryStorage()) {
   assert.deepEqual([...run.assisted], ["infinite health"]);
   assert.deepEqual(completed, []);
   assert.deepEqual(store.getState().kills, {});
+  // Counted all the same among the boss's fights: one kill, no death.
+  assert.deepEqual(store.fightsOf("alchemical_hydra"), { kills: 1, deaths: 0 });
   // What it kept of the fight: its time, the damage the player took, the hits its encounter named and the weapon.
   assert.ok(killTicks(run) > 0 && killTicks(run) === run.killTick - run.startTick);
   // Its script prays every attack and steps off every mechanic: 54 hits on the player, all blocked.
@@ -160,7 +162,15 @@ async function track(name, storage = memoryStorage()) {
   assert.deepEqual(createCombatAchievementsStore(storage).selectedFor("alchemical_hydra"), ["lightning_lure", "dont_flame_me"]);
   assert.deepEqual(again.selectedFor("vorkath"), []);
   again.reset("alchemical_hydra");
-  assert.deepEqual(again.getState(), { completed: {}, kills: {}, selected: { alchemical_hydra: ["lightning_lure", "dont_flame_me"] }, settings: { failureMessages: true, repeatFailureMessages: false } });
+  assert.deepEqual(again.getState(), { completed: {}, kills: {}, fights: {}, selected: { alchemical_hydra: ["lightning_lure", "dont_flame_me"] }, settings: { failureMessages: true, repeatFailureMessages: false } });
+  // Every fight that ended: kills and deaths, kept, and forgotten with the boss.
+  again.recordFight("alchemical_hydra", "kill");
+  again.recordFight("alchemical_hydra", "death");
+  again.recordFight("alchemical_hydra", "death");
+  assert.deepEqual(createCombatAchievementsStore(storage).fightsOf("alchemical_hydra"), { kills: 1, deaths: 2 });
+  assert.deepEqual(again.fightsOf("vorkath"), { kills: 0, deaths: 0 });
+  again.reset("alchemical_hydra");
+  assert.deepEqual(again.fightsOf("alchemical_hydra"), { kills: 0, deaths: 0 });
   // Storage that refuses: the progress stays for the visit.
   const refusing = createCombatAchievementsStore({ getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } });
   assert.equal(refusing.recordKill("alchemical_hydra"), 1);

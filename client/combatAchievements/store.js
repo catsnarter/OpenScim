@@ -1,6 +1,8 @@
 // The player's combat achievements, kept in this browser (localStorage): the
-// tasks completed, when, the clean kills of each boss, the tasks chosen to go
-// for at each (the setup's list: `selected`, task ids by kind), and the settings. There are no
+// tasks completed, when, the clean kills of each boss, every fight of each boss
+// that ended (`fights`: { kills, deaths } by kind, the kills that did not count
+// among them), the tasks chosen to go for at each (the setup's list:
+// `selected`, task ids by kind), and the settings. There are no
 // accounts, so another browser starts from nothing. Storage that is missing
 // or refuses (a private window, blocked site data) leaves the progress in
 // memory for the visit.
@@ -12,13 +14,19 @@ const storageKey = "openscim.combatAchievements.v1";
 // wiki gives no defaults; the first is on, as it was asked for, the second off.
 export const defaultSettings = { failureMessages: true, repeatFailureMessages: false };
 
-const empty = () => ({ completed: {}, kills: {}, selected: {}, settings: { ...defaultSettings } });
+const empty = () => ({ completed: {}, kills: {}, fights: {}, selected: {}, settings: { ...defaultSettings } });
 
 function read(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(storageKey) ?? "null");
     if (parsed && typeof parsed === "object")
-      return { completed: { ...parsed.completed }, kills: { ...parsed.kills }, selected: { ...parsed.selected }, settings: { ...defaultSettings, ...parsed.settings } };
+      return {
+        completed: { ...parsed.completed },
+        kills: { ...parsed.kills },
+        fights: { ...parsed.fights },
+        selected: { ...parsed.selected },
+        settings: { ...defaultSettings, ...parsed.settings },
+      };
   } catch {
     // unreadable: start again
   }
@@ -55,6 +63,15 @@ export function createCombatAchievementsStore(storage = globalThis.localStorage)
       state = { ...state, completed: { ...state.completed, ...Object.fromEntries(keys.map((key) => [key, at])) } };
       save();
     },
+    /** Counts a fight of `kind` that ended: "kill" or "death". */
+    recordFight(kind, ended) {
+      const seen = state.fights[kind] ?? { kills: 0, deaths: 0 };
+      const next = ended === "kill" ? { ...seen, kills: seen.kills + 1 } : { ...seen, deaths: seen.deaths + 1 };
+      state = { ...state, fights: { ...state.fights, [kind]: next } };
+      save();
+    },
+    /** Every fight of `kind` that ended: { kills, deaths }. */
+    fightsOf: (kind) => state.fights[kind] ?? { kills: 0, deaths: 0 },
     /** The ids of the tasks chosen to go for at `kind`. */
     selectedFor: (kind) => state.selected[kind] ?? [],
     /** Chooses the tasks to go for at `kind` (their ids). */
@@ -66,12 +83,13 @@ export function createCombatAchievementsStore(storage = globalThis.localStorage)
       state = { ...state, settings: { ...state.settings, [key]: value } };
       save();
     },
-    /** Forgets everything but the settings and the chosen tasks, or one boss's completed tasks and kills. */
+    /** Forgets everything but the settings and the chosen tasks, or one boss's completed tasks, kills and fights. */
     reset(kind) {
       state = kind
         ? {
             completed: Object.fromEntries(Object.entries(state.completed).filter(([key]) => !key.startsWith(kind + ":"))),
             kills: Object.fromEntries(Object.entries(state.kills).filter(([key]) => key !== kind)),
+            fights: Object.fromEntries(Object.entries(state.fights).filter(([key]) => key !== kind)),
             selected: state.selected,
             settings: state.settings,
           }
