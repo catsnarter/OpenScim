@@ -22,6 +22,9 @@ const scenario = (name) => scenarios.find((s) => s.name === "alchemical-hydra/" 
 
 // Runs a scenario with a tracker reading each tick; its last run, and the tasks it completed.
 async function track(name, storage = memoryStorage()) {
+  return trackScenario(scenario(name), storage);
+}
+async function trackScenario(script, storage = memoryStorage()) {
   const store = createCombatAchievementsStore(storage);
   const completed = [];
   const failed = [];
@@ -32,7 +35,7 @@ async function track(name, storage = memoryStorage()) {
     onFail: (kind, failures, tick) => failed.push(...failures.map(({ task, reason, repeat }) => [task.id, tick, reason, repeat])),
     onAssisted: (reasons, tick) => aids.push([reasons, tick]),
   });
-  await runScenario(scenario(name), {
+  await runScenario(script, {
     onTick(tick, engine) {
       tracker.observe(engine, engine.getLastTickEvents());
     },
@@ -280,4 +283,92 @@ async function track(name, storage = memoryStorage()) {
   assert.deepEqual([...tracker.currentRun().assisted], ["an encounter command"]);
   assert.equal(store.getState().kills.alchemical_hydra, 1);
   assert.equal(tracker.streak(), 1);
+}
+
+{
+  // Vorkath's own judges, on her scripted fights (tools/determinism/scenarios/vorkath.mjs).
+  const { scenarios: vorkath } = await import("../tools/determinism/scenarios/vorkath.mjs");
+  const { attack } = await import("../tools/determinism/scenarios/common.mjs");
+  const fight = (name) => vorkath.find((s) => s.name === "vorkath/" + name);
+  const { tasks } = getCombatAchievements("vorkath");
+  assert.ok(tasks.every((task) => task.tracked), "all eleven judged");
+
+  // The crossbow kill: Crumble Undead on each spawn, the acid walked without attacking, Protect from Missiles on
+  // (its drain takes prayer points).
+  const kill = await trackScenario(fight("crossbow-kill"));
+  const reasons = Object.fromEntries(kill.failed.map(([id, , reason]) => [id, reason]));
+  assert.equal(kill.run.ended, "kill");
+  assert.equal(reasons.stick_em_with_the_pointy_end, "You attacked with a weapon other than a melee one.");
+  assert.equal(reasons.the_fremennik_way, "You attacked with something other than your fists.");
+  assert.equal(reasons.faithless_encounter, "You lost prayer points.");
+  assert.equal(kill.run.facts.zombieDestroyed, undefined, "Crumble Undead: not Zombie Destroyer");
+  assert.equal(kill.run.facts.walked, undefined, "no attack in the acid: not The Walk");
+  assert.ok(kill.run.attacks > 0 && kill.run.spells.has("Crumble Undead"));
+
+  // The spawn left to explode: Dodging the Dragon fails, whatever the explosion dealt.
+  const exploded = await trackScenario(fight("spawn-explodes"));
+  assert.ok(exploded.failed.some(([id, , reason]) => id === "dodging_the_dragon" && reason === "You were hit by a special attack."));
+
+  // The spawn and the acid, tick by tick (a crossbow lands one or two hits on a spawn before it explodes, so these
+  // are made-up ticks): what Vorkath's judges keep of them.
+  const { vorkathCombatAchievements } = await import("../client/encounters/vorkath/combatAchievements.js");
+  const { newRun } = await import("../client/combatAchievements/runs.js");
+  const play = (ticks) => {
+    const run = newRun("vorkath", 0);
+    for (const [state, events = [], hits = {}] of ticks) {
+      for (const [source, count] of Object.entries(hits)) run.hits[source] = { count, damage: 0 };
+      vorkathCombatAchievements.observe(state, run.facts, { events, run });
+    }
+    return run.facts;
+  };
+  const hit = (damage) => ({ type: "hit_applied", targetId: "vorkath-spawn", damage });
+  const cast = (spellId) => ({ type: "attack_started", sourceId: "player", targetId: "vorkath-spawn", spellId });
+  const spawn = { spawnAlive: true };
+  // 38 dealt by hits: destroyed; with Crumble Undead cast at it: not; 37: not.
+  assert.equal(play([[spawn, [hit(20)]], [spawn, [hit(18)]], [{}]]).zombieDestroyed, true);
+  assert.equal(play([[spawn, [cast("Crumble Undead")]], [spawn, [hit(38)]], [{}]]).zombieDestroyed, undefined);
+  assert.equal(play([[spawn, [hit(37)]], [{}]]).zombieDestroyed, undefined);
+  // The Walk: 12 attacks on her in one acid special, none hit by it; one hit, or 11 attacks, does not.
+  const swing = { type: "attack_started", sourceId: "player", targetId: "vorkath" };
+  const acid = { phase: "acid" };
+  const walk = (attacks, hits) => play([...Array.from({ length: attacks }, (_, n) => [acid, [swing], n === 5 ? hits : {}]), [{ phase: "active" }]]).walked;
+  assert.equal(walk(12, {}), true);
+  assert.equal(walk(12, { "Rapid fire": 1 }), undefined);
+  assert.equal(walk(11, {}), undefined);
+
+  // Dodging the Dragon: kills in a row without a special's hit, counted by the tracker; a hit starts it again.
+  const fakeFight = (specialHit) => {
+    let tick = 0;
+    const history = [];
+    return {
+      getEncounterKind: () => "vorkath",
+      getState: () => ({ currentTick: tick }),
+      player: () => ({ alive: true, equipment: {}, vitals: { hp: 99 } }),
+      getEncounterOutcome: () => ({ phase: tick >= 3 ? "victory" : "active" }),
+      getEncounterSnapshot: () => ({ state: {} }),
+      get damageHistory() {
+        return history;
+      },
+      step() {
+        tick++;
+        if (specialHit && tick === 2) history.push({ targetId: "player", source: "Zombified spawn", effectiveDamage: 0 });
+      },
+    };
+  };
+  const store = createCombatAchievementsStore(memoryStorage());
+  const tracker = createCombatAchievementsTracker({ store });
+  const fightOnce = (specialHit) => {
+    const engine = fakeFight(specialHit);
+    for (let n = 0; n < 4; n++) {
+      engine.step();
+      tracker.observe(engine, []);
+    }
+  };
+  fightOnce(false);
+  fightOnce(false);
+  assert.equal(tracker.taskStreaks().dodging_the_dragon, 2);
+  fightOnce(true);
+  assert.equal(tracker.taskStreaks().dodging_the_dragon, 0);
+  for (let n = 0; n < 5; n++) fightOnce(false);
+  assert.ok(store.completedKeys().has("vorkath:dodging_the_dragon"), "five in a row");
 }
