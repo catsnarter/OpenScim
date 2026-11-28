@@ -1,6 +1,6 @@
 // The Whisperer's overlay over the game view: the sanity bar (interface 834 in the game, CACHE), and the darkness of
-// the Shadow Realm while the player is in it. The game draws the Shadow Realm as a map of its own, darker and
-// colourless (WIKI); here the same arena is darkened instead.
+// the Shadow Realm while the player is in it. The game draws the Shadow Realm as a map of its own (WIKI); here the
+// same arena is darkened instead, keeping its colours: the light and dark seeds are told apart by theirs.
 let shown = null; // { element, fill, label, tint, viewport }
 
 function open() {
@@ -11,7 +11,7 @@ function open() {
   element.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
   const tint = document.createElement("div");
   tint.className = "whisperer-overlay__shadow";
-  tint.style.cssText = "position:absolute;inset:0;background:rgba(20,8,32,0.5);backdrop-filter:saturate(0.25);opacity:0;transition:opacity 0.3s;";
+  tint.style.cssText = "position:absolute;inset:0;background:rgba(20,8,32,0.35);opacity:0;transition:opacity 0.3s;";
   const bar = document.createElement("div");
   bar.className = "whisperer-overlay__sanity";
   bar.style.cssText = "position:absolute;left:12px;top:48px;width:160px;height:18px;border:1px solid #000;background:#3a1a1a;font:12px RuneScape Small,sans-serif;color:#fff;text-shadow:1px 1px #000;";

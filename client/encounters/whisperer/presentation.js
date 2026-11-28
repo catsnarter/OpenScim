@@ -43,8 +43,9 @@ const renderConfig = {
         const locId = fight.shadow ? (light ? seedLocs.light : seedLocs.dark) : seedLocs.real;
         const id = `whisperer-seed-${x}-${y}-${locId}`;
         return {
-          id, meshId: id, materialId: "osrs-npc", modelMatrix: identity, lifecycle: { kind: "sync" }, classification: "groundDecal",
-          data: { kind: "loc", locId, modelType: 22, rotation: 0, localX: x, localY: y, level: 0, seqId: -1 },
+          // Shape 10: the seeds' locs name their models without shapes, which the cache draws only as that one.
+          id, meshId: id, materialId: "osrs-npc", modelMatrix: identity, lifecycle: { kind: "sync" }, classification: "sceneMesh",
+          data: { kind: "loc", locId, modelType: 10, rotation: 0, localX: x, localY: y, level: 0, seqId: -1 },
         };
       });
     },
