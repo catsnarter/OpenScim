@@ -4,6 +4,8 @@ import { attackRangesDefaults, readAttackRangesSettings, isAttackDragProtected }
 import { projectileOverrideDefaults, readProjectileOverrideSettings } from "/plugins/projectileOverride.js";
 import { getDefenceTrackerInfoboxes } from "/plugins/defenceTracker.js";
 import { mountCombatAchievementsPanel } from "/combatAchievements/panel.js";
+import { mountCombatAchievementsSetup, hasCombatAchievements } from "/combatAchievements/setup.js";
+import { getCombatAchievementsEngine } from "/combatAchievements/index.js";
 import { subscribeToChat as subscribeToCombatAchievementsChat, getChatMessages as getCombatAchievementsChat, mergeChatMessages as mergeCombatAchievementsChat } from "/combatAchievements/chat.js";
 import { pickLobbyObject } from "/lobby/gateways.js";
 import { lobbyBeforeTick, lobbyAfterTick, followRemotePlayer, lobbyLink, lobbyFollowFacing } from "/net/lobbyLink.js";
@@ -333,6 +335,15 @@ import {
 var pn = toEsModule(requireReact(), 1);
 var gn = requireReactDom();
 var wn = requireJsxRuntime();
+// The list of the fight's combat achievements to go for, in the Practice menu's Setup tab
+// (client/combatAchievements/setup.js, mounted here).
+function CombatAchievementsSetupMount({ kind: kind }) {
+  const ref = (0, pn.useRef)(null);
+  (0, pn.useEffect)(() => (ref.current ? mountCombatAchievementsSetup(ref.current, kind) : undefined), [kind]);
+  return (0, wn.jsx)("div", {
+    ref: ref,
+  });
+}
 // The Combat Achievements tab: its content is client/combatAchievements/panel.js, mounted here.
 function CombatAchievementsContent() {
   const ref = (0, pn.useRef)(null);
@@ -12921,6 +12932,16 @@ var MechanicsSettings = ({
         id: "assists",
         title: "Practice aids",
         content: fj(assists),
+      });
+    }
+    const combatAchievementsKind = encounterSnapshot?.kind ?? getCombatAchievementsEngine()?.getEncounterKind?.() ?? null;
+    if (hasCombatAchievements(combatAchievementsKind)) {
+      fp.push({
+        id: "combatAchievements",
+        title: "Combat achievements",
+        content: (0, wn.jsx)(CombatAchievementsSetupMount, {
+          kind: combatAchievementsKind,
+        }),
       });
     }
     if (eC && fl.length > 0 && onExecuteEncounterCommand) {

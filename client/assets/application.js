@@ -10,7 +10,14 @@ import { projectileOverrideOptions, projectileOverrideDefaults, updateProjectile
 import { blindfoldStore, listenForBlindfold } from "/plugins/blindfold.js";
 import { skyboxStore } from "/plugins/skybox.js";
 import { defenceTrackerStore, setDefenceTrackerEngine } from "/plugins/defenceTracker.js";
-import { setCombatAchievementsEngine, observeCombatAchievements, combatAchievementsStore } from "/combatAchievements/index.js";
+import {
+  setCombatAchievementsEngine,
+  observeCombatAchievements,
+  combatAchievementsStore,
+  currentResults as currentCombatAchievementResults,
+  ensureStyle as ensureCombatAchievementStyle,
+} from "/combatAchievements/index.js";
+import { mountCombatAchievementsSetup, hasCombatAchievements, combatAchievementsCss } from "/combatAchievements/setup.js";
 import { defaultSettings as combatAchievementsDefaults } from "/combatAchievements/store.js";
 // The replay's undo and markers: their options (Settings, Simulation) and keys.
 import { replayMarkerStore, listenForReplayKeys } from "/replay/markers.js";
@@ -17234,6 +17241,9 @@ var EncounterPanel = ({
                             }),
                           ],
                         }),
+                      (0, jsxRuntime.jsx)(CombatAchievementsSetup, {
+                        kind: encounterKind,
+                      }),
                     ],
                   }),
                 ],
@@ -31258,6 +31268,76 @@ const COMBAT_ACHIEVEMENT_CHAT_SETTINGS = [
   ["failureMessages", "Combat Achievements Tasks - Failure", "Failing a combat task is followed by a chatbox message saying why it failed."],
   ["repeatFailureMessages", "Combat Achievements Tasks - Repeat failure", "The same, for a combat task already completed."],
 ];
+// The setup window's list of a boss's combat achievements to go for (client/combatAchievements/setup.js, mounted
+// here). The victory screen lists how each chosen task went (CombatAchievementsResults).
+function CombatAchievementsSetup({ kind: kind }) {
+  const ref = (0, React.useRef)(null);
+  const shown = hasCombatAchievements(kind);
+  (0, React.useEffect)(() => (shown && ref.current ? mountCombatAchievementsSetup(ref.current, kind) : undefined), [kind, shown]);
+  if (!shown) {
+    return null;
+  }
+  return (0, jsxRuntime.jsxs)("fieldset", {
+    className: "encounter-assists",
+    children: [
+      (0, jsxRuntime.jsx)("legend", {
+        className: "section-label",
+        children: "Combat achievements",
+      }),
+      (0, jsxRuntime.jsx)("div", {
+        ref: ref,
+      }),
+    ],
+  });
+}
+// The victory screen's section: each task chosen to go for, completed, failed (why, and on which tick), or not
+// completed (a kill count still short). Nothing chosen, no section.
+const combatAchievementStatusText = { completed: "Completed", failed: "Failed", "not completed": "Not completed", "in progress": "In progress" };
+function CombatAchievementsResults() {
+  (0, React.useEffect)(() => ensureCombatAchievementStyle("ca-ui-style", combatAchievementsCss), []);
+  const results = currentCombatAchievementResults();
+  if (!results.length) {
+    return null;
+  }
+  return (0, jsxRuntime.jsxs)("section", {
+    className: "victory-modal-record victory-modal-ca",
+    "aria-labelledby": "victory-modal-ca-heading",
+    children: [
+      (0, jsxRuntime.jsx)("h2", {
+        id: "victory-modal-ca-heading",
+        className: "victory-modal-record-heading",
+        children: "Combat achievements",
+      }),
+      (0, jsxRuntime.jsx)("ul", {
+        className: "victory-modal-ca-list",
+        children: results.map(({ task, status, reason, tick }) =>
+          (0, jsxRuntime.jsxs)("li", {
+            className: "victory-modal-ca-row victory-modal-ca-row--" + status.replace(" ", "-"),
+            children: [
+              (0, jsxRuntime.jsx)("span", {
+                className: "victory-modal-ca-status",
+                children: combatAchievementStatusText[status],
+              }),
+              (0, jsxRuntime.jsx)("span", {
+                className: "victory-modal-ca-name",
+                children: task.name,
+              }),
+              (0, jsxRuntime.jsx)("span", {
+                className: "victory-modal-ca-tick",
+                children: status === "failed" && tick != null ? "Tick " + tick : "",
+              }),
+              reason &&
+                (0, jsxRuntime.jsx)("span", {
+                  className: "victory-modal-ca-reason",
+                  children: reason,
+                }),
+            ],
+          }, task.id),
+        ),
+      }),
+    ],
+  });
+}
 function CombatAchievementsChatControl() {
   const settings = (0, React.useSyncExternalStore)(combatAchievementsStore.subscribe, () => combatAchievementsStore.getState().settings);
   return (0, jsxRuntime.jsxs)("div", {
@@ -35269,6 +35349,7 @@ function VictoryModal({
                 }),
               ],
             }),
+            (0, jsxRuntime.jsx)(CombatAchievementsResults, {}),
             (0, jsxRuntime.jsxs)("div", {
               className: "victory-modal-actions",
               children: [
