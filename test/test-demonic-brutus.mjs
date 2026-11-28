@@ -94,7 +94,8 @@ const specials = (ticks) =>
   const list = specials(ticks);
   assert.ok(list.length >= 4, `${list.length} specials`);
   for (let n = 1; n < list.length; n++) assert.notEqual(list[n].name, list[n - 1].name, "charge and slam in turn");
-  assert.deepEqual([...new Set(list.map((special) => special.afterStandards))].sort(), [2, 3], "after two and after three");
+  assert.equal(list[0].afterStandards, 2, "two butts before his first special (OBS)");
+  assert.ok(list.slice(1).some((special) => special.afterStandards === 3), "three before most later ones (OBS)");
   // Two or three butts before each special (WIKI, OBS), the special 5 ticks after the last (OBS).
   for (const special of list) {
     assert.ok([2, 3].includes(special.afterStandards), `${special.afterStandards} butts before the fade at ${special.fadedAt}`);

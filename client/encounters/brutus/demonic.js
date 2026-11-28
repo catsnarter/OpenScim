@@ -2,8 +2,8 @@
 // version of Brutus, in the same field: the Brutus picker's "Version".
 //
 // He butts the player every 5 ticks: crush, up to 4, through Protect from
-// Melee. After two or three butts (two if the player has dealt 100 at the
-// fight's start) he fades and uses a special, then two or three more, and so on:
+// Melee. After two butts he fades and uses a special, then three more (now and
+// then two), and so on:
 // - charge: he reappears on a side of the player and dashes across him; three
 //   ghosts do the same from the other sides, a tick apart, clockwise.
 // - slam: he reappears at a corner of the player and stomps the corner tile,
@@ -47,10 +47,11 @@ export const bossActorId = "brutus";
 
 const attackSpeed = 5; // WIKI, OBS
 const meleeMaxHit = 4; // WIKI: "max hit of 4", "can hit through Protect from Melee"; OBS up to 3, praying melee
-// WIKI (Strategies): "Every two to three attacks" (the article: "After three basic attacks"); OBS: 5 ticks apart, then
-// the special 5 on; three before 7 of 10 specials, two before 3, nothing seen to tell which: at random.
-const standardsBeforeSpecial = [2, 3];
-const earlyDamage = 100; // WIKI: "more than ~100 damage at the start of the fight": then after two
+// WIKI (Strategies): "Every two to three attacks" (the article: "After three basic attacks"); OBS, four kills on video:
+// 5 ticks apart, then the special 5 on. Before his first special, two (both kills that show it, at 81 and 93 damage
+// dealt: the wiki's "~100 damage at the start" isn't needed); before each later one, two for 6 of 40, else three.
+const standardsBeforeFirstSpecial = 2;
+const twoStandardsChance = 6 / 40;
 const bullDamage = [45, 56]; // WIKI: "45-56 damage"; OBS none (every bull dodged)
 const orbDamage = [18, 20]; // WIKI: "18-20"; OBS 19 and 20
 const healAtPhaseTwo = 487; // WIKI, OBS: 0/750, then 487/750
@@ -68,8 +69,9 @@ const ghostStayTicks = 2; // inferred: a ghost goes once its bull is done
 const clearance = 3;
 const pushSearch = 12;
 
-// The specials' starts, in turn (OBS: E, SW, W, NE, E, SW, W, NE, E, SW, W: a charge from a side, a slam from a
-// corner). WIKI: "If West, specials start W or E ... If South, they swap N and S": the other axis, inferred.
+// The specials' starts, in turn: a charge from a side, a slam from a corner. OBS: E, SW, W, NE in three kills on
+// video; S, NW, N, SE in a fourth (from a slam at NW). WIKI: "If West, specials start W or E ... If South, they swap
+// N and S".
 const rotations = [
   [["charge", "E"], ["slam", "SW"], ["charge", "W"], ["slam", "NE"]],
   [["charge", "S"], ["slam", "NW"], ["charge", "N"], ["slam", "SE"]],
@@ -341,9 +343,8 @@ class DemonicBrutusEncounter {
       this.special = null;
     }
     if (context.tick < this.nextAt || !player.alive) return none;
-    const early = this.specialsDone === 0 && this.phase === 1 && boss.vitals.maxHp - boss.vitals.hp > earlyDamage;
-    this.standardsNeeded ??= this.randomInt(standardsBeforeSpecial);
-    if (this.standards >= (early ? standardsBeforeSpecial[0] : this.standardsNeeded) && this.startSpecial(boss, player, context)) return none;
+    this.standardsNeeded ??= this.specialsDone === 0 ? standardsBeforeFirstSpecial : this.random() < twoStandardsChance ? 2 : 3;
+    if (this.standards >= this.standardsNeeded && this.startSpecial(boss, player, context)) return none;
     if (!this.inMeleeReach(boss, player)) return none;
     this.nextAt = context.tick + attackSpeed;
     this.standards++;
