@@ -1,10 +1,13 @@
 // For each boss here with combat achievements (client/combatAchievements/bosses.js): how many of its wiki tasks are
 // tracked, by its own judges or the shared ones (judges.js), and which are not yet. It fails when a boss's own judge
 // names a task the wiki does not have (a typo, or a task the wiki renamed: run tools/fetch-combat-achievements.mjs),
-// or when bosses.js names a monster the wiki has no task of, or a kind that is not an encounter.
+// when bosses.js names a monster the wiki has no task of, or a kind that is not an encounter, or when the client's
+// tasks.js is not the tasks of bosses.js's monsters in tools/combat-achievements/tasks.json (a boss added without
+// running tools/fetch-combat-achievements.mjs --offline).
 //
 //   node tools/check-combat-achievements.mjs           the counts, and the tasks not tracked
 //   node tools/check-combat-achievements.mjs <kind>    the same for one boss
+import { readFile } from "node:fs/promises";
 import { loadEnvironment } from "./determinism/harness.mjs";
 
 await loadEnvironment(); // its module hooks resolve the client's web-root imports
@@ -15,6 +18,11 @@ const { encounterRegistry } = await import("../client/encounters/registry.js");
 
 const only = process.argv[2];
 const problems = [];
+const allTasks = JSON.parse(await readFile(new URL("./combat-achievements/tasks.json", import.meta.url), "utf8"));
+const bossMonsters = new Set(combatAchievementBosses.map((boss) => boss.monster));
+const expected = allTasks.filter((task) => bossMonsters.has(task.monster));
+if (JSON.stringify(expected) !== JSON.stringify(combatAchievementTasks))
+  problems.push("client/combatAchievements/tasks.js is not the tasks of bosses.js's monsters: run node tools/fetch-combat-achievements.mjs --offline");
 let tracked = 0;
 let total = 0;
 for (const boss of combatAchievementBosses) {
@@ -35,7 +43,7 @@ for (const boss of combatAchievementBosses) {
   console.log(`${boss.monster}: ${achievements.tasks.length - untracked.length} of ${achievements.tasks.length} tracked${note}`);
   for (const task of untracked) console.log(`  not tracked: ${task.name} (${task.type}): ${task.description}`);
 }
-const monsters = new Set(combatAchievementTasks.map((task) => task.monster));
+const monsters = new Set(allTasks.map((task) => task.monster));
 console.log(`${tracked} of ${total} tasks tracked, of ${combatAchievementBosses.length} bosses; the wiki has tasks of ${monsters.size} monsters.`);
 for (const problem of problems) console.error("problem: " + problem);
 if (problems.length) process.exit(1);
