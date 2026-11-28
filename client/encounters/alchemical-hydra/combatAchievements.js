@@ -8,7 +8,9 @@
 //   pools "Poison pool" (poison.js);
 // - empowered is the snapshot's `empowered`, set as a wrong vent erupts under
 //   it (encounter.js); a flame wall spawned is its flame special reaching its
-//   breath, the stage that lights the walls;
+//   breath, the stage that lights the walls, as it stops in the middle (WIKI:
+//   The Flame Skipper: it fails once the Hydra "reach[es] the middle and
+//   stop[s] moving");
 // - a kill's time runs from the fight's first tick to the tick it dies. Where
 //   the game's timer starts is not on the wiki's pages (inferred);
 // - "without leaving the room" is clean kills in a row of the Hydra without
@@ -28,7 +30,8 @@ import { ticksUnder, hitsFrom, killTicks, elapsedTicks } from "../../combatAchie
 const dharoksGreataxes = new Set([4718, 4886, 4887, 4888, 4889, 4890]);
 
 const kills = (n) => ({ check: (run, progress) => progress.kills >= n, target: (progress) => ({ current: Math.min(progress.kills, n), of: n }) });
-// A speed task: met by a kill under the time, failed as the fight runs past it.
+// A speed task: met by a kill under the time, failed as the fight runs past it. Under 1:20 is 133 ticks
+// (WIKI: Alchemical Speed-Runner), as ticksUnder gives.
 const under = (seconds) => ({
   check: (run) => killTicks(run) <= ticksUnder(seconds),
   failed: (run) => elapsedTicks(run) > ticksUnder(seconds) && "You did not kill the Alchemical Hydra in time.",
