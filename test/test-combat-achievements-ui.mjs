@@ -2,7 +2,8 @@
 // the Practice menu's Setup lists the Alchemical Hydra's tasks to go for, folded until opened, a box each, kept as
 // they are ticked; a
 // chosen task's failure is told in the chat; and the victory screen lists how each chosen task went, the failed ones
-// with why and the tick. With infinite health and the boss's hitpoints set, the kill does not count.
+// with why and the tick. With infinite health and the boss's hitpoints set, the kill does not count. The boss's setup header
+// shows its kills, deaths and K/D, and Settings, Interface, Game chat turns it off.
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { browserOptions } from "../tools/browser.mjs";
@@ -93,6 +94,38 @@ try {
   const all = await section.locator(".victory-modal-ca-row").evaluateAll((items) => items.map((item) => [item.querySelector(".victory-modal-ca-status").textContent, item.querySelector(".victory-modal-ca-name").textContent, item.querySelector(".victory-modal-ca-tick").textContent]));
   assert.ok(all.length > 0 && all.every(([status, , tick]) => status === "Failed" && /^Tick \d+$/.test(tick)), JSON.stringify(all));
   assert.ok(all.some(([, name]) => name === "No Pressure"), "the twisted bow fails No Pressure on the first tick");
+
+  // The boss's setup header: its two kills, no death, and their ratio; Settings, Interface, Game chat turns it off.
+  await page.goto(process.env.TEST_ORIGIN + "/");
+  await page.locator(".loading-screen").waitFor({ state: "hidden", timeout: 180000 });
+  // The menu's items, the menu opened until they show (a click as the page settles can close it again).
+  const fromMenu = async (item) => {
+    const entry = page.locator("button.controls-toggle-open").filter({ hasText: new RegExp("^" + item + "$"), visible: true }).first();
+    for (let tries = 0; tries < 5 && !(await entry.isVisible()); tries++) {
+      await page.getByRole("button", { name: "Menu", exact: true }).filter({ visible: true }).first().click();
+      await entry.waitFor({ timeout: 2000 }).catch(() => {});
+    }
+    await entry.click();
+  };
+  const openSetup = async () => {
+    await fromMenu("Encounters");
+    await page.getByText("Alchemical Hydra", { exact: true }).filter({ visible: true }).first().click();
+    await page.getByRole("button", { name: "Edit setup" }).click();
+  };
+  await openSetup();
+  const record = page.locator('[data-testid="encounter-record"]');
+  assert.equal(await record.innerText(), "Kills: 2 · Deaths: 0 · K/D: 2.00");
+  // Closed, and the list of encounters behind it.
+  await page.getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.keyboard.press("Escape");
+  await fromMenu("Settings");
+  await page.getByText("Interface", { exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole("checkbox", { name: "Boss kill record" }).click();
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("openscim.combatAchievements.v1")).settings.showRecord), false);
+  await page.keyboard.press("Escape");
+  await openSetup();
+  await page.getByRole("button", { name: "Start Encounter" }).waitFor();
+  assert.equal(await record.count(), 0, "the setting hides the header's record");
   assert.deepEqual(errors, []);
   console.log("Combat achievements in the page: the setup's list, the chat's failure, the victory screen's results");
 } finally {
